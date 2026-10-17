@@ -12,7 +12,7 @@ import random
 import pygame
 
 from .assets import PAL, CYAN, WHITE, YELLOW, RED, GREEN, ink_of
-from .ui import Menu, Message
+from .ui import Menu, Message, PLAY, SCALE
 from .world import Knight, RoomGeometry, SOLID_OBJECTS, KNIGHT_W, HIT_X0, HIT_X1
 
 # --- object ids (index into the original object table) --------------------
@@ -152,10 +152,10 @@ class Game:
         self.gas_warned = False
 
     # -------------------------------------------------------------- helpers
-    def say(self, text, obj="", who="", border=6, on_close=None):
+    def say(self, text, obj="", who="", border=6, on_close=None, flow=True):
         if len(text) == 4 and text in self.a.text:
             text = self.a.string(text)
-        self.windows.append(Message(self.a, text, obj=obj, who=who, border=border, on_close=on_close))
+        self.windows.append(Message(self.a, text, obj=obj, who=who, border=border, on_close=on_close, flow=flow))
 
     def oname(self, i):
         return self.objects[i]["name"]
@@ -251,7 +251,7 @@ class Game:
         elif v == "help":
             self.say("C041", border=5, on_close=lambda: self.say(
                 "\x10\x05REMAKE CONTROLS\n\n\x10\x07  N OR LEFT  = WALK LEFT\n  M OR RIGHT = WALK RIGHT\n  A OR UP    = JUMP\n  SPACE = COMMAND MENU\n  ESC = CANCEL\n"
-                "  F5 SAVE  F9 LOAD\n  F2 = MUSIC ON/OFF\n  F11 = FULL SCREEN", border=5,
+                "  F5 SAVE  F9 LOAD\n  F2 = MUSIC ON/OFF\n  F11 = FULL SCREEN", border=5, flow=False,
                 on_close=self.show_title_menu))
         elif v == "quit":
             pygame.event.post(pygame.event.Event(pygame.QUIT))
@@ -415,7 +415,7 @@ class Game:
             self.say("C63A")
         else:
             self.give_to_knight(i)
-            self.say("\x10\x05YOU ARE NOW CARRYING\n\x10\x07" + "\n".join(self.oname(j) for j in self.carried), border=5)
+            self.say("\x10\x05YOU ARE NOW CARRYING\n\x10\x07" + "\n".join(self.oname(j) for j in self.carried), border=5, flow=False)
 
     def cmd_drop(self):
         self.choose_object("C695", list(self.carried), self.drop)
@@ -510,7 +510,7 @@ class Game:
                 extra.append("THE CANDLE IS LIT")
             if extra:
                 lines += "\n\x10\x06" + "\n".join(extra)
-            self.say(lines, border=5)
+            self.say(lines, border=5, flow=False)
         elif what == "c":
             self.choose_char(self.chars_here(), self.examine_char, suffix="EXAMINE ?")
         else:
@@ -524,13 +524,13 @@ class Game:
             state = "TRAPPED IN A WHITE-OUT SPELL"
         held = ", ".join(self.oname(i) for i in self.holds(c)) or "NOTHING"
         self.say("\x10\x05EXAMINE %s\n\n\x10\x07HAPPINESS  \x10\x04%3d\n\x10\x07STAMINA    \x10\x04%3d\n"
-                 "\x10\x07%s\n\x10\x07HOLDING: \x10\x06%s" % (ch["name"], ch["happy"], ch["energy"], state, held), border=5)
+                 "\x10\x07%s\n\x10\x07HOLDING: \x10\x06%s" % (ch["name"], ch["happy"], ch["energy"], state, held), border=5, flow=False)
 
     def examine_obj(self, i):
         yn = lambda b: "YES" if b else "NO"
         self.say("\x10\x05%s\n\n\x10\x07WEIGHT    \x10\x04%s\n\x10\x07BLOW      \x10\x04%s\n\x10\x07READ      \x10\x04%s\n"
                  "\x10\x07WEAR      \x10\x04%s" % (self.oname(i), "HEAVY" if i in HEAVY else "LIGHT", yn(i in BLOWABLE),
-                                                yn(i in READ_TEXT), yn(i in WEARABLE)), border=5)
+                                                yn(i in READ_TEXT), yn(i in WEARABLE)), border=5, flow=False)
 
     # read --------------------------------------------------------------------------------
     def cmd_read(self):
@@ -682,7 +682,8 @@ class Game:
     def cmd_locate(self):
         others = [c for c in self.chars if c["room"] is not None]
         self.choose_char(others, lambda c: self.say(
-            "\x10\x05%s IS IN\n\x10\x07%s" % (self.cname(c), self.g["rooms"][self.chars[c]["room"]]["name"]), border=5),
+            "\x10\x05%s IS IN\n\x10\x07%s" % (self.cname(c), self.g["rooms"][self.chars[c]["room"]]["name"]), border=5,
+            flow=False),
             suffix="LOCATE ?")
 
     def cmd_teleport(self):
@@ -912,6 +913,8 @@ class Game:
 
     # ------------------------------------------------------------------ drawing
     def draw(self, surf):
+        """surf is the window surface (960x720): the Spectrum-resolution world
+        is scaled up into it, then all text is drawn at full resolution."""
         screen = pygame.Surface((256, 192))
         if self.state == "title":
             screen.fill((0, 0, 0))
@@ -919,12 +922,14 @@ class Game:
                 screen.blit(self.a.loading, (0, 0))
         else:
             self.draw_room(screen)
-        for w in self.windows:
-            w.draw(screen, self.tick)
         surf.fill((0, 0, 0))
-        surf.blit(screen, (32, 24))
+        surf.blit(pygame.transform.scale(screen, PLAY.size), PLAY.topleft)
+        if self.state != "title":
+            self.draw_room_text(surf)
         if self.state in ("play", "dead", "won"):
             self.draw_hud(surf)
+        for w in self.windows:
+            w.draw(surf, self.tick)
 
     def draw_room(self, s):
         r = self.room
@@ -942,9 +947,6 @@ class Game:
             y = 80 + f["lift_floor"] * 8
             if (self.tick // 10) % 2:
                 s.fill(YELLOW, (122, y + 1, 4, 6))
-        # the original prints the name on row 5 with a space either side
-        name = " %s " % self.g["rooms"][r]["name"]
-        self.a.draw_text(s, (256 - 8 * len(name)) // 2, 40, name, WHITE, paper=(0, 0, 0))
         for o in self.objects:
             if o["room"] == r and o["holder"] is None and o["gfx"] in self.a.objs:
                 s.blit(self.a.tinted(self.a.objs[o["gfx"]], ink_of(o["attr"])), (o["px"], o["py"]))
@@ -962,26 +964,45 @@ class Game:
                     if cr not in aura:
                         pygame.draw.rect(s, (RED, GREEN, PAL[9])[n], (c["px"] - 6 - n * 2, c["py"] - 6 - n * 2,
                                                                        28 + n * 4, 44 + n * 4), 1)
-            if not c["awake"] and (self.tick // 25) % 2:
-                self.a.draw_text(s, c["px"] + 12, c["py"] - 8, "Z", WHITE)
         kn = self.knight
         col = YELLOW if self.flags.get("armour") and (self.tick // 6) % 2 else CYAN
         s.blit(self.a.tinted(self.a.knight[kn.frame()], col), (int(kn.x), int(kn.y)))
 
+    def draw_room_text(self, surf):
+        t = self.a.type
+        # room name on the ceiling row (row 5), like the original, on a black band
+        name = self.g["rooms"][self.room]["name"]
+        size = 24
+        w = t.width(name, size) + 40
+        y = PLAY.top + 40 * SCALE
+        surf.fill((0, 0, 0), (PLAY.centerx - w // 2, y - 2, w, 8 * SCALE + 4))
+        t.draw(surf, PLAY.centerx, y + 1, name, WHITE, size, center=True)
+        # sleeping characters
+        if (self.tick // 25) % 2:
+            for c in self.chars_here():
+                if not c["awake"]:
+                    t.draw(surf, PLAY.left + (c["px"] + 14) * SCALE, PLAY.top + (c["py"] - 10) * SCALE,
+                           "Zz", WHITE, 22)
+
     def draw_hud(self, surf):
-        a = self.a
-        a.draw_text(surf, 32, 220, "STRENGTH", YELLOW)
+        a, t = self.a, self.a.type
+        # top border: lift position and music state
+        floor = ["ROOF", "4TH FLOOR", "3RD FLOOR", "2ND FLOOR", "1ST FLOOR", "GROUND FLOOR", "BASEMENT"][self.flags["lift_floor"]]
+        t.draw(surf, PLAY.left, 22, "LIFT: " + floor, PAL[13], 22)
+        if not self.music_on:
+            t.draw(surf, PLAY.right - t.width("MUSIC OFF  (F2)", 20), 24, "MUSIC OFF  (F2)", PAL[7], 20)
+        # bottom border: strength bar and what you are carrying
+        y = PLAY.bottom + 20
+        t.draw(surf, PLAY.left, y, "STRENGTH", YELLOW, 22)
         w = max(0, min(100, self.strength))
         colour = GREEN if w > 40 else (YELLOW if w > 20 else RED)
-        surf.fill((60, 60, 60), (104, 221, 82, 6))
-        surf.fill(colour, (105, 222, int(w * 0.8), 4))
-        x = 196
+        bx = PLAY.left + t.width("STRENGTH", 22) + 16
+        surf.fill((70, 70, 70), (bx, y + 5, 204, 16))
+        surf.fill(colour, (bx + 2, y + 7, int(w * 2), 12))
+        x = PLAY.right - len(self.carried) * 40
         for i in self.carried:
             o = self.objects[i]
             if o["gfx"] in a.objs:
-                surf.blit(a.tinted(a.objs[o["gfx"]], ink_of(o["attr"])), (x, 218))
-            x += 18
-        floor = ["ROOF", "4TH", "3RD", "2ND", "1ST", "GRND", "BSMT"][self.flags["lift_floor"]]
-        a.draw_text(surf, 32, 6, "LIFT: " + floor, PAL[5])
-        if not self.music_on:
-            a.draw_text(surf, 232, 6, "MUSIC OFF", PAL[7])
+                icon = pygame.transform.scale(a.tinted(a.objs[o["gfx"]], ink_of(o["attr"])), (32, 32))
+                surf.blit(icon, (x, y - 4))
+            x += 40

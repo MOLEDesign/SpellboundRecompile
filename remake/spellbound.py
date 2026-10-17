@@ -44,9 +44,9 @@ def main():
     pygame.init()
     flags = pygame.SCALED | (pygame.FULLSCREEN if args.fullscreen else 0)
     if args.headless:
-        window = pygame.display.set_mode((320, 240))
+        window = pygame.display.set_mode((960, 720))
     else:
-        window = pygame.display.set_mode((320, 240), flags)
+        window = pygame.display.set_mode((960, 720), flags)
     pygame.display.set_caption("Spellbound")
     assets = Assets(args.data)
     game = Game(assets)

@@ -69,7 +69,8 @@ game's walkthrough also works for the remake.
 bake.py                 data pack builder (runs tools/bake_remake + decodes the tape)
 spellbound.py           window, input, 50 Hz loop, music
 sbremake/assets.py      data loading, ZX palette, original font, text formatting
-sbremake/ui.py          framed windows and pointer menus
+sbremake/ui.py          framed windows and pointer menus (drawn at full window resolution)
+fonts/                  Pixelify Sans (SIL Open Font License, see fonts/OFL.txt)
 sbremake/world.py       collision, Magic Knight's movement (speeds/jump measured from the original)
 sbremake/game.py        rules: objects, characters, lift, commands, spells, puzzles
 tests/reachability.py   walks the whole castle with the real physics: every room/object reachable

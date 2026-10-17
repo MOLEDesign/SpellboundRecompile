@@ -1,13 +1,19 @@
 """Windimation-style windows: framed text boxes and pointer menus.
 
 Every window is modal: while one is open the game world is frozen, as in
-the original. Windows are kept on a stack by the game.
+the original. Windows are kept on a stack by the game and drawn at window
+resolution (not on the 256x192 Spectrum screen), so text uses a proper
+proportional font with room between the lines.
 """
 import pygame
 
-from .assets import PAL, format_text
+from .assets import PAL, layout_text
 
-WIN_COLS = 26          # text columns inside a window
+SCALE = 3                                   # Spectrum pixels -> window pixels
+PLAY = pygame.Rect(32 * SCALE, 24 * SCALE, 256 * SCALE, 192 * SCALE)
+WIN_W = 640                                 # window width in pixels
+PAD = 26                                    # inner padding
+TEXT_SIZE = 22
 
 
 class Window:
@@ -15,25 +21,34 @@ class Window:
 
     def __init__(self, assets):
         self.a = assets
+        self.t = assets.type
         self.done = False
         self.result = None
 
     # -- drawing helpers -------------------------------------------------
-    def frame(self, surf, rows, cols=WIN_COLS, top=6):
-        """Draw a black box with a double frame; returns the text origin."""
-        w, h = (cols + 2) * 8, (rows + 2) * 8
-        x = (256 - w) // 2
-        y = top * 8
+    def frame(self, surf, inner_h):
+        """Black box with a double frame centred on the play area; returns
+        the (x, y) of the text area."""
+        w, h = WIN_W, inner_h + 2 * PAD
+        x = PLAY.centerx - w // 2
+        y = max(PLAY.top + 120, PLAY.centery - h // 2)
+        y = min(y, PLAY.bottom - h - 8)
         ink = PAL[self.border + 8]
-        surf.fill((0, 0, 0), (x - 2, y - 2, w + 4, h + 4))
-        pygame.draw.rect(surf, ink, (x, y, w, h), 2)
-        pygame.draw.rect(surf, ink, (x + 4, y + 4, w - 8, h - 8), 1)
-        return x + 8, y + 8
+        shadow = pygame.Surface((w, h), pygame.SRCALPHA)
+        shadow.fill((0, 0, 0, 120))
+        surf.blit(shadow, (x + 8, y + 8))
+        surf.fill((0, 0, 0), (x, y, w, h))
+        pygame.draw.rect(surf, ink, (x, y, w, h), 4)
+        pygame.draw.rect(surf, ink, (x + 9, y + 9, w - 18, h - 18), 2)
+        return x + PAD, y + PAD
 
-    def draw_lines(self, surf, x, y, lines):
+    def draw_lines(self, surf, x, y, lines, size=TEXT_SIZE):
+        lh = self.t.line_height(size)
         for row, line in enumerate(lines):
-            for col, (ch, ink) in enumerate(line):
-                surf.blit(self.a.glyph(ch, PAL[ink + 8]), (x + col * 8, y + row * 8))
+            cx = x
+            for text, ink in line:
+                cx += self.t.draw(surf, cx, y + row * lh, text, PAL[ink + 8], size)
+        return y + len(lines) * lh
 
     def key(self, action):
         pass
@@ -45,9 +60,9 @@ class Window:
 class Message(Window):
     """A text box closed with fire/space/enter."""
 
-    def __init__(self, assets, text, ink=7, obj="", who="", border=6, on_close=None):
+    def __init__(self, assets, text, ink=7, obj="", who="", border=6, on_close=None, flow=True):
         super().__init__(assets)
-        self.lines = format_text(text, WIN_COLS, ink, obj, who)[:16]
+        self.lines = layout_text(self.t, text, WIN_W - 2 * PAD, TEXT_SIZE, ink, obj, who, flow=flow)[:14]
         self.border = border
         self.on_close = on_close
 
@@ -58,9 +73,8 @@ class Message(Window):
                 self.on_close()
 
     def draw(self, surf, tick):
-        rows = max(1, len(self.lines))
-        top = max(5, 14 - (rows + 2) // 2)
-        x, y = self.frame(surf, rows, top=top)
+        lh = self.t.line_height(TEXT_SIZE)
+        x, y = self.frame(surf, max(1, len(self.lines)) * lh - (lh - self.t.font(TEXT_SIZE).get_height()))
         self.draw_lines(surf, x, y, self.lines)
 
 
@@ -70,7 +84,7 @@ class Menu(Window):
 
     def __init__(self, assets, title, options, on_choose, ink=7, border=5, title_ink=5, cancel=True):
         super().__init__(assets)
-        self.title = format_text(title, WIN_COLS, title_ink) if title else []
+        self.title = layout_text(self.t, title, WIN_W - 2 * PAD, TEXT_SIZE, title_ink) if title else []
         self.options = options          # list of (label, value)
         self.on_choose = on_choose
         self.sel = 0
@@ -90,18 +104,20 @@ class Menu(Window):
             self.done = True
 
     def draw(self, surf, tick):
-        n = len(self.title) + (1 if self.title else 0) + len(self.options)
-        top = max(5, 14 - (n + 2) // 2)
-        x, y = self.frame(surf, n, top=top)
-        self.draw_lines(surf, x, y, self.title)
-        oy = y + (len(self.title) + (1 if self.title else 0)) * 8
+        lh = self.t.line_height(TEXT_SIZE)
+        gap = lh // 2 if self.title else 0
+        x, y = self.frame(surf, len(self.title) * lh + gap + len(self.options) * lh - 4)
+        oy = self.draw_lines(surf, x, y, self.title) + gap
+        fh = self.t.font(TEXT_SIZE).get_height()
         for i, (label, _) in enumerate(self.options):
-            yy = oy + i * 8
-            text = label[:WIN_COLS - 3]
+            yy = oy + i * lh
             if i == self.sel:
-                surf.fill(PAL[15], (x + 16, yy, (WIN_COLS - 2) * 8, 8))
-                self.a.draw_text(surf, x + 24, yy, text, PAL[0])
+                bar = pygame.Rect(x + 26, yy - (lh - fh) // 2, WIN_W - 2 * PAD - 26, lh)
+                surf.fill(PAL[15], bar)
+                self.t.draw(surf, x + 38, yy, label, PAL[0], TEXT_SIZE, shadow=False)
                 # pointing finger, nudging back and forth
-                surf.blit(self.a.glyph(">", PAL[13]), (x + 4 + ((tick // 6) % 2), yy))
+                nx = x + ((tick // 6) % 2) * 3
+                cy = yy + fh // 2
+                pygame.draw.polygon(surf, PAL[13], [(nx, cy - 8), (nx + 16, cy), (nx, cy + 8)])
             else:
-                self.a.draw_text(surf, x + 24, yy, text, PAL[self.ink + 8])
+                self.t.draw(surf, x + 38, yy, label, PAL[self.ink + 8], TEXT_SIZE)
