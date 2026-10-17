@@ -47,6 +47,7 @@ static void clear_screen(uint8_t attr)
 int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: %s tap outdir\n", argv[0]); return 2; }
+    S.break_pc = -1;
     char err[256], path[600];
     if (spec_load_spellbound_tap(&S, argv[1], err, sizeof err)) { fprintf(stderr, "%s\n", err); return 1; }
     S.rom[STUB] = 0x76; S.rom[STUB + 1] = 0x18; S.rom[STUB + 2] = 0xfd;

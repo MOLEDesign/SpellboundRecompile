@@ -21,6 +21,7 @@ int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: %s tap outdir [first last]\n", argv[0]); return 2; }
     int first = argc > 3 ? atoi(argv[3]) : 0, last = argc > 4 ? atoi(argv[4]) : 56;   /* 57 rooms: 9120 bytes of layouts / 160 */
+    S.break_pc = -1;
     char err[256], path[512];
     if (spec_load_spellbound_tap(&S, argv[1], err, sizeof err)) { fprintf(stderr, "%s\n", err); return 1; }
     S.rom[STUB] = 0x76;                       /* HALT; JR STUB */

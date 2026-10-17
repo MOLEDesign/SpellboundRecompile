@@ -55,6 +55,8 @@ typedef struct Spectrum {
     /* diagnostics */
     uint8_t *coverage;    /* optional: 64K*8 bytes, executed-address map per C000 bank */
     int trace_rom;
+    int break_pc;         /* tools: stop spec_run_frame when PC reaches this (-1 = off) */
+    int break_hit;
     const char *save_path;
 
     uint32_t fb[SCREEN_W * SCREEN_H]; /* 0xAARRGGBB */

@@ -43,9 +43,10 @@ LD BC,4000; LDIR; LD A,10h; OUT (C),A; EI; RET`.
 | F9F4 / FCF4  | Magic Knight graphics / mask, 8 frames × 96 bytes               |
 | FFF4 / FFFF  | IM 2 trampoline: `JP A768` / `JR` (planted in every bank)       |
 | bank 3       | room layouts (C000, 57 × 160) and block definitions (E3A0)      |
-| bank 4       | AY music driver (C000 init, C003 stop, C006 play) and tune data  |
+| bank 4       | Rob Hubbard's AY music driver (C000 init, C003 stop, C006 play) and tunes |
 | bank 7       | shadow screen + clean copy of the room (E000+) for sprite restore |
-| banks 1, 6   | further game data – not yet decoded                              |
+| bank 6       | game text (dictionary compressed), room/object names             |
+| bank 1       | further game data – not yet decoded                              |
 
 ## Hardware use
 
@@ -94,6 +95,30 @@ writes the result to the screen, using the line table at 6680.
 4. Assets the game builds at run time (rooms, mirrored decorations) are
    captured by calling the game's own routines in the emulator. This is
    exact without decoding every packed format by hand.
+
+## Text, objects and characters
+
+* Text is in bank 6, 0-terminated, compressed with a word dictionary.
+  Bytes below 5B are literal, with control codes: 0D/0E newline, 10 n ink,
+  09 indent, 1D object name, 1E/1F character name. Bytes 5B+ are word
+  tokens. Token t-5B (<64h) is the n-th 0-terminated word at E8F9, and the
+  rest come from EC4D. Words can themselves contain tokens.
+* Room names: DEB6, one entry per room, `[length][text]0`. A lone `0`
+  keeps the previous room's name on screen.
+* Object names: DCD8 (index 0 = "NOTHING AT ALL"). Object state: 635C,
+  3 bytes per object (room, column, bottom row; room 99 = not in the
+  world). Definitions: 9A1D + 8*n (byte 6 attribute, byte 7 graphic).
+* Characters: GIMBAL THOR FLORIN ORIK SAMSUN ELRAND ROSMAR BANSHEE.
+  Position table 6344 (3 bytes, room|80h, column, row). Record 62CA + 8*n
+  (bytes 4/5 = attribute and 16×32 graphic). Hands: 631C + 5*n.
+* Graphics table C544: 4-byte entries holding (graphic, mask) pointers for
+  16×16 objects (1–44) and 16×32 characters (69–76), or (w, h, data) for
+  scenery decorations (45+).
+* Exits: 982A + 2*room = left and right neighbour (FF = none). Floors are
+  rooms 1–8 (roof), 9–16, 17–24, 25–32, 33–40, 41–48 and 49–56
+  (basement). Room 0 is the lift.
+* The in-game credits text confirms: game by David Jones, graphics by Ray
+  Owen, music by Rob Hubbard.
 
 ## Next steps toward a full rewrite
 

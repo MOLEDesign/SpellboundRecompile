@@ -14,7 +14,16 @@ scanner) is reimplemented in C.
 > `S_BND128.TAP` in `original/` (or next to the program). `.gitignore` keeps
 > the TAP and everything extracted from it out of git.
 
-## Play on macOS
+## Two ways to play
+
+1. **The remake** (`remake/`): a from-scratch Python/pygame-ce version that
+   reuses the original rooms, sprites, text and music, with new game code.
+   See [remake/README.md](remake/README.md). Quick start:
+   `pip3 install pygame-ce && make remake`
+2. **The original, running natively** (`src/`): the untouched Z80 program in
+   a small built-in 128K Spectrum machine, described below.
+
+## Play the original on macOS
 
 ```sh
 brew install sdl2

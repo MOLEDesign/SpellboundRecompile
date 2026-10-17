@@ -17,3 +17,8 @@ Spellbound.app/
 disasm/
 tools/mapper
 tools/asset_render
+
+# remake: baked data pack (original game graphics/text/music)
+remake/data/
+tools/bake_remake
+__pycache__/

@@ -31,6 +31,7 @@ static void hook_write(void *ctx, uint16_t a, uint8_t v)
 int main(int argc, char **argv)
 {
     if (argc < 4) { fprintf(stderr, "usage: %s tap from to [frame:key:len...]\n", argv[0]); return 2; }
+    S.break_pc = -1;
     char err[256];
     if (spec_load_spellbound_tap(&S, argv[1], err, sizeof err)) { fprintf(stderr, "%s\n", err); return 1; }
     S.cpu.read = hook_read;

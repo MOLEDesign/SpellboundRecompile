@@ -307,9 +307,10 @@ static void ret(Spectrum *s)
 void spec_init(Spectrum *s)
 {
     uint8_t *cov = s->coverage;
-    int tr = s->trace_rom;
+    int tr = s->trace_rom, bp = s->break_pc;
     const char *sp = s->save_path;
     memset(s, 0, sizeof *s);
+    s->break_pc = bp;
     s->coverage = cov;
     s->trace_rom = tr;
     s->save_path = sp;
@@ -414,6 +415,7 @@ void spec_run_frame(Spectrum *s)
     while (s->frame_t < FRAME_T) {
         z->irq_line = s->frame_t < 36;
         uint16_t pc = z->pc;
+        if (pc == s->break_pc) { s->break_hit = 1; return; }
         if (pc < 0x4000) {
             if (pc == 0x0556) { trap_tape(s, 0); s->frame_t += 100; continue; }
             if (pc == 0x04c2) { trap_tape(s, 1); s->frame_t += 100; continue; }

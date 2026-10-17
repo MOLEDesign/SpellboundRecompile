@@ -47,7 +47,18 @@ disasm: spellbound
 	python3 tools/z80dis.py extracted/bank4.bin --org 0xC000 --end 0x10000 --bank 4 \
 	  --coverage disasm/run.cov -o disasm/bank4_music.asm
 
-clean:
-	rm -rf spellbound zextest Spellbound.app $(TOOLS)
+# The remake (Python + pygame-ce): bake its data pack from the TAP, then play
+remake-data:
+	python3 remake/bake.py $(TAP)
 
-.PHONY: all app extract disasm clean
+remake: remake-data
+	python3 remake/spellbound.py
+
+remake-test:
+	python3 remake/tests/reachability.py
+	python3 remake/tests/playthrough.py
+
+clean:
+	rm -rf spellbound zextest Spellbound.app $(TOOLS) tools/bake_remake
+
+.PHONY: all app extract disasm remake remake-data remake-test clean

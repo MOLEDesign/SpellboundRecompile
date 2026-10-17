@@ -120,6 +120,7 @@ int main(int argc, char **argv)
     Shot shots[MAX_EVENTS]; int nshots = 0;
     static Spectrum spec;
     Spectrum *s = &spec;
+    s->break_pc = -1;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
