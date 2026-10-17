@@ -18,9 +18,10 @@ scanner) is reimplemented in C.
 
 1. **The remake** (`remake/`): a from-scratch Python/pygame-ce version that
    reuses the original rooms, sprites, text and music, with new game code.
+   The game uses better fonts and has an in-game map.
    See [remake/README.md](remake/README.md). Quick start:
    `pip3 install pygame-ce && make remake`
-2. **The original, running natively** (`src/`): the untouched Z80 program in
+3. **The original, running natively** (`src/`): the untouched Z80 program in
    a small built-in 128K Spectrum machine, described below.
 
 ## Play the original on macOS
