@@ -5,7 +5,7 @@
     python3 remake/bake.py path/to/S_BND128.TAP     # once: builds remake/data
     python3 remake/spellbound.py
 
-Keys: arrows or N/M (walk), Up or A (jump), Space (command menu / select),
+Keys: arrows (walk; N also walks left), M or Tab (castle map), Up or A (jump), Space (command menu / select),
 Esc (cancel), F5 save, F9 load, F2 music on/off, F11 full screen, Cmd+Q quit.
 Testing: --headless --script "FRAME:ACTION ..." --shot FRAME:file.png
 """
@@ -76,7 +76,7 @@ def main():
     clock = pygame.time.Clock()
     frame = 0
     running = True
-    keymap_action = {pygame.K_SPACE: "fire", pygame.K_RETURN: "fire", pygame.K_ESCAPE: "cancel",
+    keymap_action = {pygame.K_m: "map", pygame.K_TAB: "map", pygame.K_SPACE: "fire", pygame.K_RETURN: "fire", pygame.K_ESCAPE: "cancel",
                      pygame.K_BACKSPACE: "cancel", pygame.K_UP: "up", pygame.K_a: "up",
                      pygame.K_DOWN: "down", pygame.K_z: "down", pygame.K_F5: "save", pygame.K_F9: "load"}
     while running:
@@ -105,7 +105,7 @@ def main():
         keys = pygame.key.get_pressed()
         held = {
             "left": keys[pygame.K_LEFT] or keys[pygame.K_n],
-            "right": keys[pygame.K_RIGHT] or keys[pygame.K_m],
+            "right": keys[pygame.K_RIGHT],
             "jump": keys[pygame.K_UP] or keys[pygame.K_a],
         }
         if pad:

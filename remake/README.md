@@ -35,7 +35,8 @@ the same.
 
 | key                  | action                                   |
 |----------------------|------------------------------------------|
-| ← → or N M           | walk                                      |
+| ← → (N = left)       | walk                                      |
+| M or Tab             | castle map, showing where you are         |
 | ↑ or A               | jump (hold to keep jumping)               |
 | Space / Return       | command menu, choose                      |
 | ↑ ↓ (A Z)            | move the pointer in menus                 |
@@ -70,6 +71,7 @@ bake.py                 data pack builder (runs tools/bake_remake + decodes the 
 spellbound.py           window, input, 50 Hz loop, music
 sbremake/assets.py      data loading, ZX palette, original font, text formatting
 sbremake/ui.py          framed windows and pointer menus (drawn at full window resolution)
+sbremake/mapview.py     the castle map (M)
 fonts/                  Pixelify Sans (SIL Open Font License, see fonts/OFL.txt)
 sbremake/world.py       collision, Magic Knight's movement (speeds/jump measured from the original)
 sbremake/game.py        rules: objects, characters, lift, commands, spells, puzzles

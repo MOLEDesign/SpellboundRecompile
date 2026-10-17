@@ -13,6 +13,8 @@ import pygame
 
 from .assets import PAL, CYAN, WHITE, YELLOW, RED, GREEN, ink_of
 from .ui import Menu, Message, PLAY, SCALE
+from .mapview import MapView
+from .assets import parse_cells
 from .world import Knight, RoomGeometry, SOLID_OBJECTS, KNIGHT_W, HIT_X0, HIT_X1
 
 # --- object ids (index into the original object table) --------------------
@@ -250,7 +252,7 @@ class Game:
             self.load()
         elif v == "help":
             self.say("C041", border=5, on_close=lambda: self.say(
-                "\x10\x05REMAKE CONTROLS\n\n\x10\x07  N OR LEFT  = WALK LEFT\n  M OR RIGHT = WALK RIGHT\n  A OR UP    = JUMP\n  SPACE = COMMAND MENU\n  ESC = CANCEL\n"
+                "\x10\x05REMAKE CONTROLS\n\n\x10\x07  LEFT / N   = WALK LEFT\n  RIGHT      = WALK RIGHT\n  UP / A     = JUMP\n  SPACE = COMMAND MENU\n  M = CASTLE MAP\n  ESC = CANCEL\n"
                 "  F5 SAVE  F9 LOAD\n  F2 = MUSIC ON/OFF\n  F11 = FULL SCREEN", border=5, flow=False,
                 on_close=self.show_title_menu))
         elif v == "quit":
@@ -291,6 +293,9 @@ class Game:
             return
         if act == "load" and not self.windows:
             self.load()
+            return
+        if act == "map" and self.state == "play" and not self.windows:
+            self.windows.append(MapView(self))
             return
         if self.windows:
             w = self.windows[-1]
@@ -968,8 +973,30 @@ class Game:
         col = YELLOW if self.flags.get("armour") and (self.tick // 6) % 2 else CYAN
         s.blit(self.a.tinted(self.a.knight[kn.frame()], col), (int(kn.x), int(kn.y)))
 
+    def draw_banner(self, surf):
+        """The copyright banner at the top of every room: keep the original
+        frame, redraw its text (string C319 + SPELLBOUND) in the new font."""
+        t = self.a.type
+        S = SCALE
+        surf.fill((0, 0, 0), (PLAY.left + 8 * S, PLAY.top + 8 * S, 240 * S, 24 * S))
+        surf.fill((0, 0, 0), (PLAY.left + 88 * S, PLAY.top + 32 * S, 80 * S, 8 * S))
+        lines, line = [], []
+        for ch, ink in parse_cells(self.a.string("C319")) + [("\n", 7)]:
+            if ch == "\n":
+                lines.append(line)
+                line = []
+            else:
+                line.append((ch, ink))
+        colours = [YELLOW, PAL[7], WHITE]
+        for row, cells in enumerate(lines[:3]):
+            text = "".join(ch for ch, _ in cells).strip()
+            col = PAL[cells[-1][1] + 8] if row == 0 and cells else colours[row]
+            t.draw(surf, PLAY.centerx, PLAY.top + (8 + row * 8) * S - 1, text, col if row else YELLOW, 21, center=True)
+        t.draw(surf, PLAY.centerx, PLAY.top + 32 * S - 1, "SPELLBOUND", YELLOW, 22, center=True)
+
     def draw_room_text(self, surf):
         t = self.a.type
+        self.draw_banner(surf)
         # room name on the ceiling row (row 5), like the original, on a black band
         name = self.g["rooms"][self.room]["name"]
         size = 24
