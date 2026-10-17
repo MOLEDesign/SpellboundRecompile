@@ -22,3 +22,9 @@ tools/asset_render
 remake/data/
 tools/bake_remake
 __pycache__/
+
+# Champions of Krynn: your disks and everything extracted from them
+*.adf
+*.ADF
+krynn/original/
+krynn/extracted/

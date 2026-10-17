@@ -1,0 +1,95 @@
+# Champions of Krynn (Amiga): file formats and engine notes
+
+Everything here was worked out from the game's own disks. The PC Gold Box
+engine is closely related, and the public reverse-engineering work on
+*Curse of the Azure Bonds* (the `coab` project) was used as a reading
+reference for the rendering and script rules. The code here is new.
+
+## Disks
+
+Three AmigaDOS (OFS) disks plus a save disk. `cok/adf.py` reads them.
+
+| disk | contents |
+|------|----------|
+| 1 `Disk One`   | `game` (480 KB hunk executable), title/intro `.lbm`, common `.DAA`, sound samples |
+| 2 `Disk Two`   | area 1: `ECL1 GEO1 WALLDEF1 ITEM1 MON1*` (`.DAX`), `PIC1 SPRIT1 BIGPIC1 CPIC1 8X8D1` (`.DAA`) |
+| 3 `Disk Three` | area 2: the same set with `2`, plus `save/` (a party: `CHRDATA*.sav`, `savgamA.dat`) |
+
+## Containers (`cok/dax.py`)
+
+* `.DAX`: little-endian PC layout. `u16 headerLength`, then 9-byte entries
+  `id u8, offset u32, rawSize u16, compSize u16`. Data starts after the header.
+* `.DAA`: the same entries, big endian. Here the header length *includes*
+  the 2-byte length field.
+* animation `.DAA` (`pic*`, `sprit*`): `u16 headerLength`, 6-byte entries
+  `id u8, 0, offset u32`. Each entry is one animation blob.
+
+Compression (`cok/compress.py`): DAX run-length (`n<0x80` gives n+1
+literal bytes; otherwise the next byte repeats `256-n` times) and Amiga
+PackBits (repeats `257-n`, `0x80` is a no-op).
+
+## Pictures (`cok/gfx.py`)
+
+Picture block (after decompression): `u16 height, u16 widthBytes, u16 x,
+u16 y, u8 frameCount`. 5-plane pictures then carry a 32-entry 12-bit
+palette. The bitmap is planar (all of plane 0, then plane 1, and so on),
+rows are padded to even bytes, and the frames sit side by side. 8x8 symbol
+sets (`8X8D*`) use the same layout with 4 planes and no palette. Colour 13
+is transparent there.
+
+Animation blob: `u16 n` + DAX-compressed header (the picture header +
+palette + `u16 size[count-1]`). Frame 0 follows as PackBits. Each later
+frame is a PackBits XOR delta against frame 0, stored in `size+2` bytes.
+Monster sprites have 3 frames (near, middle and far); their background
+colour is transparent.
+
+Palette indices 0-15 are the EGA colours in every picture.
+
+The `.lbm` files are ordinary IFF ILBM (`cok/ilbm.py`).
+
+## Maps (`cok/geo.py`)
+
+GEO entries are 0x402 bytes: a 2-byte header, then four 16x16 planes:
+
+| offset | meaning |
+|--------|---------|
+| 0x000 | high nibble: wall type facing N; low nibble: E |
+| 0x100 | high nibble: wall type facing S; low nibble: W |
+| 0x200 | per-square flags |
+| 0x300 | door bits, 2 per side (N, E, S, W from bit 0): 0 solid, 1 open door, 2 locked, 3 barred |
+
+Wall type `t` (1-15) is style `(t-1)%5` of wall slot `(t-1)//5`. WALLDEF
+entries hold one or more 780-byte wall sets (5 styles x 156 symbol ids). A
+set with several parts fills consecutive slots. Its 8x8 symbols come from
+`8X8D` entry `id*10+k+1`, or `id` when it has one part. Symbol ids are
+global (`0x01` common set `8X8D0:0xCB`, `0x2E` slot 1, `0x74` slot 2,
+`0xBA` slot 3), shifted by the starting slot. `cok/view3d.py` draws the
+88x88 first-person view from 10 patch kinds, back to front.
+
+## ECL event scripts (`cok/ecl.py`)
+
+Bytecode loaded at VM address 0x8000. Operands carry a type byte:
+`0` byte, `1`/`3` memory word read, `2` immediate word, `0x80` packed
+6-bit string, `0x81` string variable. Every block starts with 5 entry
+points: *run* (after each move), *search* (after the move is drawn),
+pre-camp, camp-interrupted and *init*. Krynn has 66 opcodes. 0x00-0x40
+match the PC engine, and 0x41 is `ADD EP` (award experience). The
+executable still holds the opcode name table at 0x44100.
+
+Memory map: `4B00-4EFF` world flags (`4BE6` in-3D flag, `4BF2` previous
+block, `4BC3/4BC4` overland X/Y, `4BC5` loaded GEO), `7A00-7BFF` strings
+(`7B2C` current place name), `7C00-7FFF` more state and the selected
+character, `8000-9DFF` the block itself, `C04B/C04C/C04D` party X/Y/facing.
+
+A new game starts in block `0x24` ("At the Inn of the Last Home in
+Solace..."). Block `0x10` is the overland map, a 38x15 grid over big
+picture `0x79`, with a place table at `0x8E72`. Block `0x11` is the first
+outpost, and `0x20` is Throtl.
+
+## Executable
+
+`game` is a hunk file of 101 code hunks compiled from Pascal. Each unit
+starts with its constants, and a `move.l a4,-(sp); movea.l base(pc),a4;
+link a5` prologue points A4 at them. `tools/hunk.py` relocates it at
+0x10000. `tools/disasm68k.py` disassembles it by recursive descent
+(capstone), names routines and annotates A4-relative strings.

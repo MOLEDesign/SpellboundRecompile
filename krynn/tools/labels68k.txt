@@ -1,0 +1,5 @@
+# Names for the 68000 disassembly (address name ; comment). Hex addresses
+# are for the image relocated at 0x10000 by hunk.py.
+010000 start             ; calls every unit's initialisation in turn
+025D06 unit_chargen      ; character creation unit (Pick Race / Class / God ...)
+044100 ecl_opcode_names  ; ECL opcode names EXIT..ADD EP (debug table)

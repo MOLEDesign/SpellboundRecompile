@@ -14,6 +14,9 @@ scanner) is reimplemented in C.
 > `S_BND128.TAP` in `original/` (or next to the program). `.gitignore` keeps
 > the TAP and everything extracted from it out of git.
 
+> **Also here:** [`krynn/`](krynn/README.md) takes apart *Champions of
+> Krynn* (Amiga, SSI 1990) and starts a Python remake of it.
+
 ## Two ways to play
 
 1. **The remake** (`remake/`): a from-scratch Python/pygame-ce version that
