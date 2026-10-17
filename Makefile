@@ -3,16 +3,19 @@
 #   Linux:  apt install libsdl2-dev
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra
-SDL_CFLAGS := $(shell sdl2-config --cflags)
-SDL_LIBS   := $(shell sdl2-config --libs)
+# looked up only when building the emulator (the remake does not need SDL2 here)
+SDL_CFLAGS = $(shell sdl2-config --cflags 2>/dev/null)
+SDL_LIBS   = $(shell sdl2-config --libs 2>/dev/null)
 
 SRC = src/main.c src/spectrum.c src/z80.c
 HDR = src/spectrum.h src/z80.h
+# your copy of the game; for the remake it may also be the downloaded .zip
 TAP ?= original/S_BND128.TAP
 
 all: spellbound
 
 spellbound: $(SRC) $(HDR)
+	@command -v sdl2-config >/dev/null || { echo "SDL2 not found: run  brew install sdl2  (only needed for the emulator, not the remake)"; exit 1; }
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc $(SRC) -o $@ $(SDL_LIBS)
 
 zextest: tests/zextest.c src/z80.c src/z80.h
@@ -49,9 +52,10 @@ disasm: spellbound
 
 # The remake (Python + pygame-ce): bake its data pack from the TAP, then play
 remake-data:
-	python3 remake/bake.py $(TAP)
+	python3 remake/bake.py $(if $(wildcard $(TAP)),$(TAP))
 
-remake: remake-data
+remake:
+	@test -f remake/data/game.json || python3 remake/bake.py $(if $(wildcard $(TAP)),$(TAP))
 	python3 remake/spellbound.py
 
 remake-test:

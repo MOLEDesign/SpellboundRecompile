@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Builds the remake's data pack from your own copy of the original tape.
 
-    python3 remake/bake.py path/to/S_BND128.TAP
+    python3 remake/bake.py [path/to/S_BND128.TAP or the .zip it came in]
+
+With no argument it looks for S_BND128.TAP (or a .zip containing it) in
+original/, the repo root, remake/, ~/Downloads and ~/Desktop.
 
 Steps:
   1. builds and runs tools/bake_remake (the original engine running in the
@@ -144,15 +147,66 @@ def build_raw(tap):
     src = [os.path.join(ROOT, p) for p in ("tools/bake_remake.c", "src/z80.c", "src/spectrum.c")]
     if not os.path.exists(exe) or any(os.path.getmtime(s) > os.path.getmtime(exe) for s in src):
         cc = os.environ.get("CC", "cc")
-        subprocess.check_call([cc, "-O2", "-I" + os.path.join(ROOT, "src"), src[0], src[1], "-o", exe])
+        try:
+            subprocess.check_call([cc, "-O2", "-I" + os.path.join(ROOT, "src"), src[0], src[1], "-o", exe])
+        except (OSError, subprocess.CalledProcessError):
+            sys.exit("\nCould not compile tools/bake_remake.c. On macOS install the compiler with:\n"
+                     "    xcode-select --install\nthen run this again.")
     os.makedirs(RAW, exist_ok=True)
     subprocess.check_call([exe, tap, RAW])
 
 
+SEARCH_DIRS = [os.path.join(ROOT, "original"), ROOT, HERE,
+               os.path.expanduser("~/Downloads"), os.path.expanduser("~/Desktop")]
+NOT_FOUND = """
+Can't find the Spellbound tape (S_BND128.TAP).
+It is not part of the git repo. Put your copy (the .TAP, or the .zip it came
+in) into:
+    %s
+and run this again, or pass its path:
+    python3 remake/bake.py ~/Downloads/Spellbound128.tap.zip
+""" % os.path.join(ROOT, "original")
+
+
+def tap_from_zip(path):
+    """Extract the first .tap from a zip into original/ and return its path."""
+    import zipfile
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist() if n.lower().endswith(".tap") and not n.startswith("__MACOSX")]
+        if not names:
+            return None
+        os.makedirs(os.path.join(ROOT, "original"), exist_ok=True)
+        dest = os.path.join(ROOT, "original", "S_BND128.TAP")
+        with open(dest, "wb") as f:
+            f.write(z.read(names[0]))
+    print("extracted %s from %s" % (names[0], path))
+    return dest
+
+
+def find_tap(arg=None):
+    if arg:
+        arg = os.path.expanduser(arg)
+        if not os.path.exists(arg):
+            sys.exit("file not found: %s\n%s" % (arg, NOT_FOUND))
+        return tap_from_zip(arg) if arg.lower().endswith(".zip") else arg
+    for d in SEARCH_DIRS:
+        if not os.path.isdir(d):
+            continue
+        files = sorted(os.listdir(d))
+        for f in files:
+            if f.lower() in ("s_bnd128.tap", "spellbound128.tap", "spellbound.tap"):
+                return os.path.join(d, f)
+        for f in files:
+            if f.lower().endswith(".zip") and "spellbound" in f.lower() or f.lower().endswith(".tap.zip") and "bnd" in f.lower():
+                t = tap_from_zip(os.path.join(d, f))
+                if t:
+                    return t
+    sys.exit(NOT_FOUND)
+
+
 def main():
-    if len(sys.argv) < 2:
-        sys.exit("usage: python3 remake/bake.py S_BND128.TAP")
-    tap = sys.argv[1]
+    tap = find_tap(sys.argv[1] if len(sys.argv) > 1 else None)
+    print("using", tap)
     build_raw(tap)
     os.makedirs(os.path.join(DATA, "img"), exist_ok=True)
 

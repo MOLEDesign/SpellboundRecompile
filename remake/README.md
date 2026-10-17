@@ -14,11 +14,19 @@ That folder is git-ignored and must not be shared.
 
 ## Play
 
+The game itself is not in the repo, so first put your copy where the
+bake step can find it: `original/S_BND128.TAP` (create the folder), or just
+leave the downloaded `.zip` in `~/Downloads`. Then:
+
 ```sh
+xcode-select --install        # once, if you have no C compiler yet
 pip3 install pygame-ce
-python3 remake/bake.py original/S_BND128.TAP     # once (needs a C compiler: xcode-select --install)
-python3 remake/spellbound.py
+make remake                   # first run bakes remake/data from the tape, then plays
 ```
+
+`python3 remake/bake.py path/to/game.zip` also works with an explicit path
+(a `.TAP` or the `.zip` it came in). SDL2/Homebrew is **not** needed for the
+remake; that is only for the emulator in `src/`.
 
 Or double-click `remake/run.command` in Finder. It installs pygame-ce,
 bakes the data if needed (looking for `S_BND128.TAP` in `remake/` or

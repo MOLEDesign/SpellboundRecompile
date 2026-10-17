@@ -17,13 +17,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 
-def find_tap():
-    for p in ("S_BND128.TAP", os.path.join(HERE, "S_BND128.TAP"), os.path.join(HERE, "..", "original", "S_BND128.TAP")):
-        if os.path.exists(p):
-            return p
-    return None
-
-
 def main():
     ap = argparse.ArgumentParser(description="Spellbound remake")
     ap.add_argument("--data", default=os.path.join(HERE, "data"))
@@ -36,12 +29,10 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(os.path.join(args.data, "game.json")):
-        tap = find_tap()
-        if not tap:
-            sys.exit("No game data yet. Run:  python3 remake/bake.py path/to/S_BND128.TAP")
-        print("baking game data from", tap)
+        # first run: bake.py finds the TAP (or its .zip) itself and explains if it can't
         import subprocess
-        subprocess.check_call([sys.executable, os.path.join(HERE, "bake.py"), tap])
+        if subprocess.call([sys.executable, os.path.join(HERE, "bake.py")]) != 0:
+            sys.exit(1)
 
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
