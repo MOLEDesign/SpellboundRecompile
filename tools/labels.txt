@@ -1,0 +1,51 @@
+# Format: ADDR name [; comment]   - names starting with d_/tab_/var_/msg_ are data
+# Known addresses in Spellbound 128K (main code, bank 0 at C000).
+6680 tab_screen_lines        ; 192 x 2-byte screen line addresses; also the initial stack top
+6803 start                   ; entry point (RANDOMIZE USR 26627)
+6813 restart                 ; re-entry after game over: reset stack, IM 2, menu
+6820 main_menu_loop
+685D menu_change_options   ; menu line 4
+6918 draw_main_menu
+6942 menu_instructions     ; menu line 5
+6974 init_screen
+69A8 menu_play_game        ; menu line 6
+6A4F page_bank_from_var      ; page (64A8)
+6A57 page_bank               ; A = bank 0-7 -> OUT (7FFD), keeps screen bit from (64BF)
+6A69 page_bank_rooms         ; page bank (64A8) (=3: room layouts and block definitions)
+6A6F page_bank0              ; page bank 0 back in at C000
+6AE7 init_hardware           ; reset stack, sysvars, plant IM2 jump (FFF4: JP A768, FFFF: JR) in every bank
+6FA6 enter_room              ; A = room number (0-56). Draws the room and its contents
+6FA9 enter_current_room
+7069 room_decor_loop         ; walks the room's decoration list (codes FB-FF are commands)
+70A6 room_object_loop
+7116 room_finish             ; characters, objects, exits
+7409 draw_decoration         ; A = decoration index (table C544), L = column, H = row, C = mirror mode 0-3
+7676 draw_lift_shaft
+76AF set_floor_text           ; C31B = floor glyph for the lift display
+76CB draw_block              ; A = block index: 8-byte def at bank3 E3A0 (attr, collision, flags, -, 4 tiles)
+91EC menu_select             ; moves the pointing finger, returns chosen line in A
+9337 clear_play_area
+934E clear_screen            ; fills bitmap via PUSH with SP=5800
+9367 fill_attributes
+A357 decor_blit_normal
+A36D decor_blit_mirror
+A38C decor_blit_vflip
+A3AA decor_blit_vflip_mirror
+A4F2 mirror_byte             ; reverses the bit order of A
+A4FF sprite_save_background  ; copies the clean background (bank 7, E000+) under the sprite into 5D05
+A569 sprite_mask_knight      ; Magic Knight frame (630D): gfx F9F4+96*f, mask FCF4+96*f, +180h when facing left
+A5A2 sprite_put_buffer       ; writes the 3x32 byte sprite buffer back to the screen
+A5C9 sprite_move_knight
+A654 sprite_save_attrs
+A6B1 sprite_restore_attrs
+A768 im2_handler             ; interrupt: music (bank 4), FRAMES, ROM KEYBOARD, timers
+AB18 print_char              ; A = character, font at B700 (8 bytes per glyph)
+ABBC draw_tile               ; A = tile, graphics at BB00
+ABE5 char_cell_address       ; B = row, C = column -> HL screen address
+ABF5 attr_address            ; B = row, C = column -> HL attribute address
+B700 d_font                  ; 128 glyphs, codes 00-7F (00-1F are window frame pieces)
+BB00 d_tiles                 ; 8x8 scenery tiles (92 used)
+C544 tab_decorations         ; 4-byte entries: width, height (cells), graphic pointer
+F9F4 d_knight_gfx            ; 8 frames x (3 bytes x 32 lines)
+FCF4 d_knight_mask
+FFF4 im2_jump                ; JP im2_handler (written at start-up)

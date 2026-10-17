@@ -15,3 +15,5 @@ Spellbound.app/
 *.sav
 *.cov
 disasm/
+tools/mapper
+tools/asset_render

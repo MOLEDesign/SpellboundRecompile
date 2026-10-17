@@ -283,6 +283,8 @@ def main():
     ap.add_argument("--end", type=lambda s: int(s, 0), default=0x10000)
     ap.add_argument("--entry", type=lambda s: int(s, 0), action="append", default=[])
     ap.add_argument("--labels", help="file of 'ADDR name [; comment]' lines")
+    ap.add_argument("--coverage", help="executed-address map from 'spellbound --coverage' (8 x 64K)")
+    ap.add_argument("--bank", type=int, default=0, help="which 128K bank the coverage at C000+ refers to")
     ap.add_argument("-o", "--output", default="-")
     a = ap.parse_args()
 
@@ -307,6 +309,15 @@ def main():
                     comments[ad] = m.group(3)
                 if m.group(2).startswith(("sub_", "code_", "L_")) or not m.group(2).startswith(("d_", "tab_", "var_", "msg_")):
                     a.entry.append(ad)
+
+    if a.coverage:
+        cov = open(a.coverage, "rb").read()
+        seg = cov[a.bank * 65536:(a.bank + 1) * 65536]
+        hits = [ad for ad in range(a.org, a.end) if seg[ad]]
+        # every executed address is an instruction start; tracing from all of
+        # them recovers code only reached through jump tables / JP (HL)
+        a.entry.extend(hits)
+        print("coverage: %d executed addresses" % len(hits))
 
     code = trace(mem, a.entry or [a.org], a.org, a.end)
     callers = {}

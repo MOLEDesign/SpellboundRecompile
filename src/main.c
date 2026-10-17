@@ -14,6 +14,7 @@
  *   --key F:KEYS:N     press KEYS (e.g. "space", "m", "a+m") at frame F for N frames
  *   --coverage FILE    dump executed addresses (for tools/z80dis.py)
  *   --trace-rom        log calls into the (absent) ROM
+ *   --dump F:FILE      write all 8 RAM banks (+ port 7FFD byte) at frame F
  *   --wav FILE         record the audio output (16-bit stereo 44.1kHz)
  */
 #include <SDL.h>
@@ -115,6 +116,7 @@ int main(int argc, char **argv)
     FILE *wav = NULL;
     uint32_t wav_bytes = 0;
     KeyEvent kev[MAX_EVENTS]; int nkev = 0;
+    Shot dumps[16]; int ndumps = 0;
     Shot shots[MAX_EVENTS]; int nshots = 0;
     static Spectrum spec;
     Spectrum *s = &spec;
@@ -137,6 +139,9 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--shot") && i + 1 < argc && nshots < MAX_EVENTS) {
             Shot *sh = &shots[nshots++];
             if (sscanf(argv[++i], "%d:%255s", &sh->frame, sh->path) != 2) { fprintf(stderr, "bad --shot\n"); return 2; }
+        } else if (!strcmp(a, "--dump") && i + 1 < argc && ndumps < 16) {
+            Shot *d = &dumps[ndumps++];
+            if (sscanf(argv[++i], "%d:%255s", &d->frame, d->path) != 2) { fprintf(stderr, "bad --dump\n"); return 2; }
         } else if (!strcmp(a, "--key") && i + 1 < argc && nkev < MAX_EVENTS) {
             KeyEvent *e = &kev[nkev++];
             e->len = 5;
@@ -166,6 +171,14 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    /* SAVE/LOAD position file: per-user app data folder unless given */
+    char *pref = NULL;
+    static char savebuf[1024];
+    if (!s->save_path && !headless && (pref = SDL_GetPrefPath("MOLEDesign", "Spellbound"))) {
+        snprintf(savebuf, sizeof savebuf, "%sspellbound.sav", pref);
+        s->save_path = savebuf;
+        SDL_free(pref);
+    }
     if (coverage_path) s->coverage = calloc(8, 65536);
     char err[256];
     if (spec_load_spellbound_tap(s, tap, err, sizeof err)) { fprintf(stderr, "%s\n", err); return 1; }
@@ -281,6 +294,12 @@ int main(int argc, char **argv)
             if (shots[i].frame == f) {
                 if (write_bmp(shots[i].path, s->fb, SCREEN_W, SCREEN_H)) perror(shots[i].path);
                 else if (headless) printf("frame %d -> %s\n", f, shots[i].path);
+            }
+
+        for (int i = 0; i < ndumps; i++)
+            if (dumps[i].frame == f) {
+                FILE *df = fopen(dumps[i].path, "wb");
+                if (df) { fwrite(s->ram, 1, sizeof s->ram, df); fputc(s->port7ffd, df); fclose(df); }
             }
 
         if (!headless) {
