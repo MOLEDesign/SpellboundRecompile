@@ -1,0 +1,17 @@
+# Game data is copyrighted: keep it local, never commit it.
+*.TAP
+*.tap
+*.zip
+original/
+extracted/
+assets/
+# build outputs
+spellbound
+zextest
+Spellbound.app/
+*.o
+*.bmp
+*.wav
+*.sav
+*.cov
+disasm/
