@@ -219,9 +219,11 @@ class CampView:
         sl = magic.slots(ch, day)
         use = magic.used(ch, ch.memorised, day)
         top = y
-        for key in sorted(sl, key=lambda k: (k[0], 99 if k[1] == 'bonus' else k[1])):
+        for key in sorted(sl, key=lambda k: (k[0], k[1] if isinstance(k[1], int) else 99)):
             cls, lvl = key
-            label = ('%s level %d' % (CLASS_NAME[cls], lvl)) if lvl != 'bonus' else 'Mage moon bonus (any level)'
+            label = ('%s level %d' % (CLASS_NAME[cls], lvl)) if isinstance(lvl, int) else \
+                ('Mage moon bonus (any level)' if lvl == 'bonus' else
+                 "%s's gift (special)" % magic.GODS.get(magic.deity(ch), 'The god'))
             col = GOOD if use[key] == sl[key] else TEXT
             screen.blit(small.render('%s: %d of %d' % (label, use[key], sl[key]), True, col), (x, y))
             y += ROW - 6

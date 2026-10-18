@@ -101,6 +101,15 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   dragons, the Mace of Disruption against undead, the long sword +4 vs
   reptiles hits draconians harder, and the gauntlets of ogre power and
   girdle of giant strength raise a weak character's strength bonuses.
+* **The gods and the knightly orders**: each cleric's god grants its
+  special spells in their own memorise slot (Paladine: Protection from
+  Evil 10', Majere: Silence, Kiri-Jolith: Detect Magic, Mishakal: Bless,
+  Remove Curse, Charm Person, Sirrion: Burning Hands, Shinare: Charm
+  Person) and its powers (Kiri-Jolith and, for dwarves, Reorx: +1 to hit;
+  Mishakal: one more die on every healing spell). At a hall, K lets a
+  knight petition the Knights of the Sword or the Rose, with the
+  manual's experience and ability requirements. Fighters and knights from
+  7th level and rangers from 8th strike three times every two rounds.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -130,9 +139,7 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* the gods' bonus spells for clerics
 * the vault (banking)
-* changing knightly order at a hall
 * sound and music
 
 ## Play

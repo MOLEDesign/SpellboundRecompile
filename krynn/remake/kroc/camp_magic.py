@@ -9,6 +9,7 @@ is gone for good.
 import pygame
 
 from .inventory import Panel, ROW, TEXT, HILITE, DIM, GOOD
+from .magic import heal_bonus_dice
 from .spells import SPELLS
 
 CURES = {3: (1, 8, 0), 57: (2, 8, 1), 63: (3, 8, 3)}
@@ -43,6 +44,7 @@ def cast(world, caster, sid, target=None):
         if target.hp >= target.hp_max:
             return '%s is not hurt.' % target.name
         n, size, plus = CURES[sid]
+        n += heal_bonus_dice(caster)
         amount = sum(rng.randint(1, size) for _ in range(n)) + plus
         target.hp = min(target.hp_max, max(target.hp, 0) + amount)
         line = '%s casts %s on %s: +%d.' % (caster.name, name, target.name, amount)

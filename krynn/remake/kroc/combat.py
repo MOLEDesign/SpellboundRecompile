@@ -656,7 +656,8 @@ class Battle:
             a.conditions.pop('invisible', None)
         swings = []
         for atk in a.attacks:
-            n = max(1, atk.half // 2) if not free else 1
+            # an odd number of half-attacks: the extra blow lands every other round
+            n = max(1, atk.half // 2 + (atk.half % 2 if self.round % 2 == 0 else 0)) if not free else 1
             if not free and a.has('hasted'):
                 n *= 2
             if not free and a.has('slowed'):

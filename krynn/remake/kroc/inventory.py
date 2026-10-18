@@ -243,7 +243,7 @@ class ItemsView(Panel):
             self.message = 'Only a mage of the %s Robes can use it.' % ('Red' if not red else 'White')
             return
         top = max([lvl for (c, lvl) in magic.slots(ch, self.world.day)
-                   if c == magic.MAGE and lvl != 'bonus'] or [0])
+                   if c == magic.MAGE and isinstance(lvl, int)] or [0])
         learned = []
         for sid in it.effects:
             sp = SPELLS.get(sid)

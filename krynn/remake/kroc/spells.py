@@ -85,7 +85,11 @@ def heal(n, size, plus=0):
     def eff(b, c, t, sp, lv):
         if t.status == DEAD:
             return
-        amount = roll(b.rng, n, size, plus)
+        extra = 0
+        if getattr(c, 'ref', None) is not None and getattr(sp, 'item', None) is None:
+            from .magic import heal_bonus_dice
+            extra = heal_bonus_dice(c.ref)            # Mishakal's clerics
+        amount = roll(b.rng, n + extra, size, plus)
         t.hp = min(t.hp_max, t.hp + amount)
         if t.status != OK and t.hp > 0:
             t.status = OK

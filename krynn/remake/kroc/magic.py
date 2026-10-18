@@ -106,15 +106,50 @@ def slots(ch, day=0):
         extra = moon_effect(ch, day)[1]
         if extra:
             out[(MAGE, 'bonus')] = extra
+    cleric = max(lv.get('cleric', 0), lv.get('druid', 0))
+    if cleric and specials(ch):
+        out[(CLERIC, 'special')] = 1 + (cleric >= 5)
     return out
+
+
+# The gods' gifts to their clerics (manual p.17): special spells, memorised in
+# their own slots (one, two from fifth level), and a power or two
+GOD_SPELLS = {1: (88,), 2: (89,), 3: (90,), 4: (93, 91, 92), 5: (94,), 6: (), 7: (93,)}
+GODS = {1: 'Paladine', 2: 'Majere', 3: 'Kiri-Jolith', 4: 'Mishakal', 5: 'Sirrion', 6: 'Reorx', 7: 'Shinare'}
+
+
+def deity(ch):
+    if not (ch.levels.get('cleric') or ch.levels.get('druid')) or len(ch.raw) <= 0x5E:
+        return 0
+    return ch.raw[0x5E]
+
+
+def specials(ch):
+    return GOD_SPELLS.get(deity(ch), ())
+
+
+def god_hit_bonus(ch):
+    """Kiri-Jolith's clerics, and Reorx's dwarves, fight one better."""
+    d = deity(ch)
+    race = ch.raw[0x5B] if len(ch.raw) > 0x5B else 6
+    return 1 if d == 3 or (d == 6 and race in (3, 4)) else 0
+
+
+def heal_bonus_dice(ch):
+    """Mishakal's clerics roll one more die on every healing spell."""
+    return 1 if deity(ch) == 4 else 0
 
 
 def known(ch):
     """Spell ids the character can choose to memorise, by class: {'C': [...], 'M': [...]}"""
     sl = slots(ch)
-    top = {cls: max([lvl for (c, lvl) in sl if c == cls and lvl != 'bonus'] or [0]) for cls in (CLERIC, MAGE)}
+    top = {cls: max([lvl for (c, lvl) in sl if c == cls and isinstance(lvl, int)] or [0])
+           for cls in (CLERIC, MAGE)}
     out = {CLERIC: [], MAGE: []}
     for sid, sp in sorted(SPELLS.items()):
+        if sid in specials(ch) and (CLERIC, 'special') in sl:
+            out[CLERIC].append(sid)        # the god's own gift
+            continue
         if sid in DUPLICATE or sid in DRUID or sp.level > top[sp.cls]:
             continue
         if sp.cls == CLERIC and sid not in EVIL:
@@ -129,34 +164,36 @@ def fit(ch, wanted, day=0):
 
     Mage spells beyond their level's slots go into the moon's bonus slots.
     Returns (kept, dropped)."""
+    placed = _assign(ch, wanted, day)
+    return [s for s, k in placed if k], [s for s, k in placed if not k]
+
+
+def _assign(ch, wanted, day):
+    """[(spell, slot key or None)] in order: the slot each wanted spell takes."""
     free = dict(slots(ch, day))
-    kept, dropped = [], []
+    gifts = specials(ch)
+    out = []
     for sid in wanted:
         sp = SPELLS.get(sid)
+        key = None
         if sp is None:
-            dropped.append(sid)
-            continue
-        key = (sp.cls, sp.level)
-        if free.get(key, 0) > 0:
-            free[key] -= 1
-            kept.append(sid)
+            pass
+        elif sid in gifts and free.get((CLERIC, 'special'), 0) > 0:
+            key = (CLERIC, 'special')
+        elif sid not in gifts and free.get((sp.cls, sp.level), 0) > 0:
+            key = (sp.cls, sp.level)
         elif sp.cls == MAGE and free.get((MAGE, 'bonus'), 0) > 0 and (MAGE, sp.level) in free:
-            free[(MAGE, 'bonus')] -= 1
-            kept.append(sid)
-        else:
-            dropped.append(sid)
-    return kept, dropped
+            key = (MAGE, 'bonus')
+        if key:
+            free[key] -= 1
+        out.append((sid, key))
+    return out
 
 
 def used(ch, wanted, day=0):
     """{(class, level or 'bonus'): slots taken} by a selection (for the screen)."""
-    free = dict(slots(ch, day))
-    out = {k: 0 for k in free}
-    for sid in fit(ch, wanted, day)[0]:
-        sp = SPELLS[sid]
-        key = (sp.cls, sp.level)
-        if out[key] < free[key]:
+    out = {k: 0 for k in slots(ch, day)}
+    for _, key in _assign(ch, wanted, day):
+        if key:
             out[key] += 1
-        else:
-            out[(MAGE, 'bonus')] += 1
     return out

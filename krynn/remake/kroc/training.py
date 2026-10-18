@@ -182,5 +182,38 @@ RED = {9, 11, 12, 15, 18, 19, 20, 29, 30, 31, 32, 34, 35, 45, 47, 48, 50, 51, 55
 def learnable(ch, day=0):
     """Mage spells this character may add to the grimoire now."""
     allowed = RED if _byte(ch, 0x5F) in (2, 3) else WHITE
-    top = max([lvl for (c, lvl) in magic.slots(ch, day) if c == magic.MAGE and lvl != 'bonus'] or [0])
+    top = max([lvl for (c, lvl) in magic.slots(ch, day) if c == magic.MAGE and isinstance(lvl, int)] or [0])
     return [s for s in sorted(allowed) if SPELLS[s].level <= top and s not in ch.book]
+
+
+# --- the knightly orders ---------------------------------------------------------------
+ORDERS = ('Crown', 'Sword', 'Rose')
+# minimum STR, INT, WIS, DEX, CON to petition the next order (manual p.13)
+PETITION = {2: (12, 9, 13, 9, 10), 3: (15, 10, 13, 12, 15)}
+
+
+def petition(ch):
+    """A knight asks to join the next higher order. Returns (joined, line)."""
+    if not ch.levels.get('knight'):
+        return False, '%s is not a knight.' % ch.name
+    order = max(1, _byte(ch, 0x5D))
+    if order >= 3:
+        return False, '%s is already a Knight of the Rose.' % ch.name
+    new = order + 1
+    stats = [ch.stats.get(s, 0) for s in ('STR', 'INT', 'WIS', 'DEX', 'CON')]
+    need = PETITION[new]
+    short = [n for n, have, want in zip(('STR', 'INT', 'WIS', 'DEX', 'CON'), stats, need) if have < want]
+    if short:
+        return False, 'The Knights of the %s require more %s.' % (ORDERS[new - 1], ', '.join(short))
+    xp = XP[ORDERS[new - 1].lower()]
+    first = next(i for i, v in enumerate(xp) if v) + 1           # the order's first level
+    if ch.experience < xp[first - 1]:
+        return False, 'The Knights of the %s accept knights of %d experience; %s has %d.' % (
+            ORDERS[new - 1], xp[first - 1], ch.name, ch.experience)
+    raw = bytearray(ch.raw)
+    raw[0x5D] = new
+    ch.raw = bytes(raw)
+    level = max(lv for lv in range(first, len(xp) + 1) if ch.experience >= xp[lv - 1])
+    ch.levels['knight'] = max(first, min(level, ch.levels['knight']))
+    return True, '%s is welcomed into the Knights of the %s (level %d).' % (
+        ch.name, ORDERS[new - 1], ch.levels['knight'])

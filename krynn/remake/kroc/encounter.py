@@ -89,7 +89,11 @@ def monster_combatant(world, mid, n, icon=None):
 
 def party_combatant(ch, types=None, day=0, words=None):
     n, size, bonus = ch.weapon
-    c = Combatant(ch.name, PARTY, ch.hp, ch.hp_max, ch.ac, ch.thac0, [Attack(2, n, size, bonus)],
+    lv = ch.levels
+    # fighters and knights from 7th level, rangers from 8th, strike 3 times in 2 rounds
+    half = 3 if max(lv.get('fighter', 0), lv.get('knight', 0), lv.get('paladin', 0)) >= 7 \
+        or lv.get('ranger', 0) >= 8 else 2
+    c = Combatant(ch.name, PARTY, ch.hp, ch.hp_max, ch.ac, ch.thac0, [Attack(half, n, size, bonus)],
                   ch.move, ('party', ch), ref=ch)
     if types:
         c.missile = make_missile(ch.items, types,

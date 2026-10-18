@@ -536,6 +536,37 @@ def test_camp_magic(gf):
     assert '3 Spells' in CM.cast(w, garin, 18) and scroll.hidden == 0
 
 
+def test_gods_and_orders(gf):
+    """The gods' special spells and powers; knights petitioning the next order."""
+    import random
+    from kroc import magic, training as T, encounter
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    by = {c.name: c for c in w.party}
+    kal, sirrion, knight = by['KAL'], by['SIRRION'], by['SIR STRONGSWORD']
+    assert magic.GODS[magic.deity(kal)] == 'Mishakal' and magic.GODS[magic.deity(sirrion)] == 'Majere'
+    assert magic.slots(kal)[(magic.CLERIC, 'special')] == 1
+    assert {91, 92, 93} <= set(magic.known(kal)[magic.CLERIC]) and 89 not in magic.known(kal)['C']
+    kept, dropped = magic.fit(kal, kal.memorised + [92, 93])
+    assert 92 in kept and 93 in dropped, 'one special slot at cleric level 2'
+    assert magic.heal_bonus_dice(kal) == 1 and magic.heal_bonus_dice(sirrion) == 0
+    assert magic.god_hit_bonus(kal) == 0
+    # petitioning: experience and ability scores
+    joined, line = T.petition(knight)
+    assert not joined and '12000' in line, line
+    knight.experience = 13000
+    joined, line = T.petition(knight)
+    assert joined and knight.raw[0x5D] == 2 and knight.levels['knight'] == 3, line
+    assert T.table(knight, 'knight') == 'sword'
+    knight.stats['CON'] = 12
+    knight.experience = 30000
+    assert not T.petition(knight)[0], 'the Rose wants CON 15'
+    # seventh-level fighters strike three times in two rounds
+    knight.levels['knight'] = 7
+    c = encounter.party_combatant(knight, w.files.item_types())
+    assert c.attacks[0].half == 3
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

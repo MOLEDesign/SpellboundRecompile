@@ -38,6 +38,14 @@ class HallView(Panel):
             self.train()
         elif k == pygame.K_g and self.ch.spell_picks:
             self.start_picking()
+        elif k == pygame.K_k:
+            joined, line = T.petition(self.ch)
+            if joined:
+                self.ch.refresh(self.types, self.words)
+                self.lines = (self.lines + [line])[-6:]
+                self.message = None
+            else:
+                self.message = line
 
     def click(self, pos):
         i = self.row_at(pos)
@@ -130,4 +138,5 @@ class HallView(Panel):
         for line in self.lines:
             self.text(screen, line, x, yy, GOOD)
             yy += ROW
-        self.text(screen, 'RETURN/T train   G choose a grimoire spell   ESC leave', x, r.bottom - 92, DIM)
+        self.text(screen, 'RETURN/T train   G choose a grimoire spell   K knight: petition the next order   '
+                  'ESC leave', x, r.bottom - 92, DIM)

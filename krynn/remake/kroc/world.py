@@ -173,9 +173,10 @@ class Character:
 
     def calibrate(self, types):
         from cok import items as I
+        from .magic import god_hit_bonus
         it, t = I.melee_weapon(self.items, types)
         plus = it.plus if it else 0
-        self.hit_bonus = self.base_thac0 - self.thac0 - plus
+        self.hit_bonus = self.base_thac0 - self.thac0 - plus - god_hit_bonus(self)
         base = t.dice[2] if t else 0
         self.dmg_bonus = self.weapon[2] - base - plus
 
@@ -192,7 +193,8 @@ class Character:
         if words:
             least_hit, least_dmg = strength_items(self, words, types)   # gauntlets, girdles
             hit, dmg = max(hit, least_hit or hit), max(dmg, least_dmg or dmg)
-        self.thac0 = self.base_thac0 - hit - plus
+        from .magic import god_hit_bonus
+        self.thac0 = self.base_thac0 - hit - plus - god_hit_bonus(self)
         if t is None:
             self.weapon = (1, 2, dmg)                         # fists
         else:
@@ -415,6 +417,7 @@ class World:
     def cast_cures(self):
         """Clerics use their healing spells on whoever is most hurt (the camp's Fix).
         Returns the lines to show."""
+        from .magic import heal_bonus_dice
         from .spells import SPELLS
         from .combat import roll
         out = []
@@ -429,6 +432,7 @@ class World:
                         return out
                     t = max(hurt, key=lambda c: c.hp_max - c.hp)
                     n, size, plus = {3: (1, 8, 0), 57: (2, 8, 1), 63: (3, 8, 3)}[sid]
+                    n += heal_bonus_dice(healer)
                     amount = roll(self.vm.rng, n, size, plus)
                     t.hp = min(t.hp_max, max(t.hp, 0) + amount)
                     healer.spells.remove(sid)
