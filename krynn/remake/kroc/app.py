@@ -9,7 +9,9 @@ from cok.geo import DX, DY
 
 from . import encounter
 from .combat_screen import CombatScreen
+from . import savegame
 from .journal import Journal, JournalView
+from .save_screen import SaveView
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 # Everything is drawn on a 1920x1080 frame, then fitted to the window.
@@ -276,6 +278,15 @@ class App:
         if ev.key == pygame.K_j:
             self.open_journal()
             return
+        if ev.key == pygame.K_F5:
+            if self.busy():
+                self.notify('Finish what you are doing first: you can save when the party is free to move.')
+            else:
+                self.overlay = SaveView(self, 'save')
+            return
+        if ev.key == pygame.K_F9:
+            self.overlay = SaveView(self, 'load')
+            return
         if ev.key == pygame.K_ESCAPE and not self.menu:
             self.running = False
             return
@@ -298,6 +309,30 @@ class App:
         if ev.key in KEYS:
             self.act(KEYS[ev.key])
 
+    # ------------------------------------------------------------------ saving
+    def busy(self):
+        """True while a script is waiting on the player (text, menu, fight)."""
+        return bool(self.gen or self.menu or self.combat)
+
+    def notify(self, text):
+        self.add_text(text, False)
+        self.flush()
+
+    def save_game(self, slot):
+        savegame.save(slot, self.world, self.visited)
+        self.notify('Game saved in slot %s.' % slot)
+
+    def load_game(self, slot):
+        world, visited = savegame.load(slot, self.world.files, self.log)
+        self.world, self.visited = world, visited
+        self.gen = self.menu = self.combat = None
+        self.answer = None
+        self.picture = self.sprite = None
+        self.lines, self.para = [], ''
+        self.seen_refs = set()
+        self.wait_until = 0
+        self.notify('Game %s loaded: %s.' % (slot, savegame.describe(world)))
+
     def end_combat_if_done(self):
         if self.combat is not None and self.combat.done:
             result = self.combat.b.result
@@ -306,7 +341,8 @@ class App:
                 # the party is dead: back to the start, as the original does
                 self.world = World(files=self.world.files, log=self.log)
                 self.lines, self.para, self.picture, self.sprite = [], '', None, None
-                self.add_text('The party has perished. A new band gathers at the Inn...', True)
+                self.add_text('The party has perished. A new band gathers at the Inn... '
+                              '(F9 loads a saved game.)', True)
                 self.flush()
                 self.gen = self.world.start()
                 self.answer = None
@@ -338,13 +374,25 @@ class App:
 
     # ------------------------------------------------------------------ drawing
     def draw(self):
-        if self.overlay is not None:
+        if self.overlay is not None and not getattr(self.overlay, 'over_game', False):
             self.overlay.draw(self.screen)
             self.present()
             return
+        if self.overlay is not None:
+            overlay, self.overlay = self.overlay, None      # the game underneath, then the box
+            try:
+                self.draw_game()
+            finally:
+                self.overlay = overlay
+            overlay.draw(self.screen)
+            self.present()
+            return
+        self.draw_game()
+        self.present()
+
+    def draw_game(self):
         if self.combat is not None:
             self.combat.draw(self.screen)
-            self.present()
             return
         c = self.screen
         c.fill(BG)
@@ -371,7 +419,6 @@ class App:
         pygame.draw.rect(c, FRAME, (VIEW.x - 6, text_top - 6, W - 2 * VIEW.x + 12, TEXT_BOTTOM - text_top + 12), 3)
         self._draw_text(text_top)
         self._draw_journal_button()
-        self.present()
 
     def _draw_journal_button(self):
         n = len(self.world.journal_found)

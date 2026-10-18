@@ -28,3 +28,6 @@ __pycache__/
 *.ADF
 krynn/original/
 krynn/extracted/
+
+# saved games hold your characters from the save disk
+krynn/saves/

@@ -125,6 +125,20 @@ class Character:
         self.spells = list(self.memorised)        # still available until the next rest
         self.levels = dict(zip(self.CLASSES, r[0xFE:0x106]))
 
+    # --- saving -------------------------------------------------------------------
+    def to_dict(self):
+        return {'name': self.name, 'raw': self.raw.hex(), 'hp': self.hp, 'dead': self.dead,
+                'experience': self.experience, 'memorised': self.memorised, 'spells': self.spells,
+                'items': [[i.name, i.type, i.ready, i.quantity] for i in self.items]}
+
+    @classmethod
+    def from_dict(cls, d):
+        from cok.items import Item
+        c = cls(d['name'], bytes.fromhex(d['raw']), [Item(*i) for i in d['items']])
+        c.hp, c.dead, c.experience = d['hp'], d['dead'], d['experience']
+        c.memorised, c.spells = list(d['memorised']), list(d['spells'])
+        return c
+
     CLASSES = ('cleric', 'druid', 'fighter', 'paladin', 'ranger', 'magic-user', 'thief', 'knight')
     # d20 needed to save against spells, by class and level (AD&D tables)
     SAVE_SPELL = {'cleric': (15, 15, 15, 14, 14, 14, 12, 12, 12, 11),
@@ -162,6 +176,7 @@ class World:
         self.clock = 0
         self.moved = False
         self.journal_found = []      # (kind, n) of journal entries / tavern tales heard
+        self.wall_loads = []         # LOAD WALLS calls since the wall set changed (for saves)
 
     # --- party (placeholder until character creation is rebuilt) -------------
     def load_party(self):
@@ -239,6 +254,10 @@ class World:
         common = gfx.decode_block(self.files.container('8x8d0.daa').get(0xCB)).frames
         if self.slots is None or self.slots.walldef is not wd:
             self.slots = view3d.WallSlots(wd, sym, common)
+            self.wall_loads = []
+        if all(w not in (0xFF, 0x7F) for w in (a, b, c)):
+            self.wall_loads = []        # all three slots replaced: earlier loads no longer matter
+        self.wall_loads.append((a, b, c))
         for slot, wid in ((1, a), (2, b), (3, c)):
             if wid not in (0xFF, 0x7F) and wid in wd:
                 self.slots.load(slot, wid)

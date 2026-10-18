@@ -49,6 +49,13 @@ it in Python, so its worst flaws can be fixed.
   Image, Haste and Slow, Bless and Prayer bonuses, Confusion and Fear all
   work. Tags over each icon show who is asleep, held, charmed and so on.
   Cast spells stay used until the party rests.
+* **Saving and loading**: F5 saves into one of ten slots whenever the
+  party is free to move (not mid-conversation or mid-fight), F9 loads,
+  also after the party falls. A save keeps everything: the script state
+  and all the module's flags, position, map and walls, each character's
+  record, hit points, experience, items and spells, the journal and the
+  automap. Saves are JSON files in `krynn/saves/` (kept out of git; set
+  `KRYNN_SAVES` to put them elsewhere).
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -83,7 +90,6 @@ scripts are still to be rebuilt:
 * items, treasure, shops, training, resting rules (an inn heals everyone
   fully and restores spells)
 * sound and music
-* saving and loading
 
 ## Play
 
@@ -91,6 +97,7 @@ scripts are still to be rebuilt:
 pip3 install pygame-ce
 python3 remake/krynn.py            # finds krynn/original/*.zip by itself
 python3 remake/krynn.py --size 1600x900    # or --fullscreen
+python3 remake/krynn.py --load A           # carry on from saved game A
 ```
 
 | key | action |
@@ -101,6 +108,7 @@ python3 remake/krynn.py --size 1600x900    # or --fullscreen
 | L | search/look |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
 | J | the journal (entries and tavern tales found so far) |
+| F5 / F9 | save / load (ten slots, A to J) |
 | F11 | full screen |
 | ESC | quit |
 
@@ -138,7 +146,8 @@ python3 tests/run_tests.py               # format and script checks against your
 cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, items, blocks, gamefiles, png
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
-remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal
+remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal,
+                savegame, save_screen
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

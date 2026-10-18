@@ -95,6 +95,7 @@ def _throtl_world(gf):
     drive(w.start())
     for act in ('right', 'forward', 'forward', 'forward', 'forward'):
         drive(w.step(act))
+    w.drive = drive
     return w
 
 
@@ -308,6 +309,48 @@ def test_morale(gf):
         g.status = FLED
     b.check_end()
     assert b.result == 'won' and b.finish() == 20
+
+
+def test_save_load(gf):
+    """A game saved in Throtl comes back identical and plays on the same way."""
+    import random
+    import tempfile
+    from kroc import savegame
+    w = _throtl_world(gf)
+    w.party[1].hp -= 5
+    w.party[2].spells.remove(21)
+    w.journal_found.append(('journal', 3))
+    data = savegame.snapshot(w, {(0x20, 7, 13)})
+    w2, visited = savegame.restore(json_roundtrip(data), w.files)
+    again = savegame.snapshot(w2, visited)
+    for k in data:
+        if k != 'saved':
+            assert data[k] == again[k], k
+    assert w2.slots is not None and w2.slots.ids == w.slots.ids, 'wall sets restored'
+    assert w2.party[1].hp == w.party[1].hp and w2.party[2].spells == w.party[2].spells
+    # both play on identically
+    for world in (w, w2):
+        world.vm.rng = random.Random(9)
+        for act in ('forward', 'left', 'forward', 'forward'):
+            w.drive(world.step(act))
+    assert (w.x, w.y, w.facing, w.vm.block_id) == (w2.x, w2.y, w2.facing, w2.vm.block_id)
+    assert w.vm.mem == w2.vm.mem
+    # files on disk: slots, listing, atomic write
+    old = savegame.DIR
+    savegame.DIR = tempfile.mkdtemp()
+    try:
+        savegame.save('C', w2, visited)
+        info = dict((s, lbl) for s, lbl, _ in savegame.listing())
+        assert info['C'] and info['A'] is None, info
+        w3, _ = savegame.load('C', w.files)
+        assert (w3.x, w3.y) == (w2.x, w2.y)
+    finally:
+        savegame.DIR = old
+
+
+def json_roundtrip(d):
+    import json
+    return json.loads(json.dumps(d))
 
 
 def main():
