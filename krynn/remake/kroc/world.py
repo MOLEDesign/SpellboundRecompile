@@ -124,6 +124,7 @@ class World:
         self.selected = 0
         self.clock = 0
         self.moved = False
+        self.journal_found = []      # (kind, n) of journal entries / tavern tales heard
 
     # --- party (placeholder until character creation is rebuilt) -------------
     def load_party(self):

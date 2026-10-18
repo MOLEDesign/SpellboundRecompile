@@ -138,6 +138,21 @@ def test_combat_dungeon(gf):
     _fight(b)
 
 
+def test_journal(gf):
+    """References in story text are found; the extracted journal (if any) is complete."""
+    from kroc.journal import Journal
+    refs = Journal.references("SIR KARL CONTINUES, AND YOU RECORD IT IN JOURNAL ENTRY 51.")
+    assert refs == [('journal', 51)], refs
+    assert Journal.references('YOU OVERHEAR TAVERN TALE NUMBER 12') == [('tavern', 12)]
+    j = Journal()
+    if not j.available:
+        print('     (no extracted/journal/journal.json: run tools/journal.py MANUAL.pdf)')
+        return
+    assert all(j.entry('journal', n) for n in range(1, 89)), 'journal entries 1-88'
+    assert all(j.entry('tavern', n) for n in range(1, 58)), 'tavern tales 1-57'
+    assert 'Paladine' in ' '.join(j.entry('journal', 51)['text'])
+
+
 def main():
     try:
         gf = GameFiles(sys.argv[1] if len(sys.argv) > 1 else None)

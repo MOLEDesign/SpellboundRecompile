@@ -9,6 +9,7 @@ from cok.geo import DX, DY
 
 from . import encounter
 from .combat_screen import CombatScreen
+from .journal import Journal, JournalView
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 # Everything is drawn on a 1920x1080 frame, then fitted to the window.
@@ -90,6 +91,10 @@ class App:
         self.picture = None         # (Picture, kind)
         self.sprite = None          # (Picture, distance)
         self.combat = None          # CombatScreen while fighting
+        self.overlay = None         # JournalView while reading
+        self.journal = Journal()
+        self.journal_button = pygame.Rect(0, 0, 0, 0)
+        self.seen_refs = set()      # references already shown from the current text
         self.wait_until = 0
         self.visited = set()
         self.cache = {}
@@ -150,6 +155,7 @@ class App:
     def add_text(self, text, clear):
         if clear:
             self.lines, self.para = [], ''
+            self.seen_refs = set()
         for part in text.split('\n'):
             self.para += part
             if part is not text.split('\n')[-1]:
@@ -168,12 +174,13 @@ class App:
     # ------------------------------------------------------------------ VM pump
     def pump(self):
         """Run the script until it needs the player."""
-        while self.gen and not self.menu and not self.combat and time.time() >= self.wait_until:
+        while self.gen and not self.menu and not self.combat and not self.overlay and time.time() >= self.wait_until:
             try:
                 req = self.gen.send(self.answer)
             except StopIteration:
                 self.gen = None
                 self.flush()
+                self.check_journal()
                 break
             self.answer = None
             k = req[0]
@@ -182,6 +189,7 @@ class App:
             elif k == 'menu':
                 self.flush()
                 self.menu, self.sel = (req[1], req[2]), 0
+                self.check_journal()
             elif k == 'picture':
                 pid = req[1]
                 if pid == 0xFF:
@@ -197,6 +205,7 @@ class App:
                     self.sprite = (sp, min(req[2], len(sp.frames) - 1))
             elif k == 'clearbox':
                 self.lines, self.para = [], ''
+                self.seen_refs = set()
             elif k == 'delay':
                 self.wait_until = time.time() + 0.6
             elif k == 'combat':
@@ -220,6 +229,18 @@ class App:
         if self.world.in_dungeon and self.world.geo:
             self.visited.add((self.world.geo_id, self.world.x, self.world.y))
 
+    def check_journal(self):
+        """Open the page of any journal entry / tavern tale the text just mentioned."""
+        text = ' '.join(self.lines + [self.para])
+        for ref in Journal.references(text):
+            if ref in self.seen_refs:
+                continue
+            self.seen_refs.add(ref)
+            if ref not in self.world.journal_found:
+                self.world.journal_found.append(ref)
+            self.overlay = JournalView(self, self.journal, self.world.journal_found, ref, popup=True)
+            return
+
     def act(self, action):
         if self.gen or self.menu or self.combat:
             return
@@ -242,6 +263,17 @@ class App:
         if self.combat is not None:
             self.combat.key(ev)
             self.end_combat_if_done()
+            return
+        if self.overlay is not None:
+            popup = self.overlay.popup
+            self.overlay.key(ev)
+            if self.overlay.done:
+                self.overlay = None
+                if popup and ev.key == pygame.K_j:
+                    self.open_journal()
+            return
+        if ev.key == pygame.K_j:
+            self.open_journal()
             return
         if ev.key == pygame.K_ESCAPE and not self.menu:
             self.running = False
@@ -281,7 +313,19 @@ class App:
                 self.answer = result == 'won'
             self.pump()
 
+    def open_journal(self):
+        last = self.world.journal_found[-1] if self.world.journal_found else None
+        self.overlay = JournalView(self, self.journal, self.world.journal_found, last)
+
     def click(self, pos):
+        if self.overlay is not None:
+            self.overlay.click(pos)
+            if self.overlay.done:
+                self.overlay = None
+            return
+        if self.journal_button.collidepoint(pos) and self.combat is None:
+            self.open_journal()
+            return
         if self.menu:
             for n, r in enumerate(self.menu_rects):
                 if r.collidepoint(pos):
@@ -293,6 +337,10 @@ class App:
 
     # ------------------------------------------------------------------ drawing
     def draw(self):
+        if self.overlay is not None:
+            self.overlay.draw(self.screen)
+            self.present()
+            return
         if self.combat is not None:
             self.combat.draw(self.screen)
             self.present()
@@ -321,7 +369,16 @@ class App:
             text_top = TEXT_TOP
         pygame.draw.rect(c, FRAME, (VIEW.x - 6, text_top - 6, W - 2 * VIEW.x + 12, TEXT_BOTTOM - text_top + 12), 3)
         self._draw_text(text_top)
+        self._draw_journal_button()
         self.present()
+
+    def _draw_journal_button(self):
+        n = len(self.world.journal_found)
+        label = ' JOURNAL (J)  %d ' % n
+        t = self.small.render(label, True, (0, 0, 0), (200, 170, 90))
+        r = t.get_rect(bottomright=(W - 46, TEXT_BOTTOM - 10))
+        self.screen.blit(t, r)
+        self.journal_button = r
 
     def blit_zoomed(self, surf, pos, zoom):
         w, h = surf.get_size()

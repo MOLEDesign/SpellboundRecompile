@@ -32,6 +32,16 @@ it in Python, so its worst flaws can be fixed.
   opportunity, dying at 0 and dead at -10). Monsters and the party take
   their stats from the game's own records. The screen shows how far you can
   move, which squares are threatened, and your hit chance and damage.
+* **The journal is in the game**: when the story says "you record it in
+  journal entry 51" or "you hear tavern tale 12", that page of the manual
+  opens on screen, maps and pictures included. Every entry the party finds
+  is kept in the Journal (J, or the button bottom right), with separate
+  Journal and Tavern tabs. The text comes from your own scanned manual:
+  `python3 tools/journal.py original/<manual>.pdf` (needs `brew install
+  poppler tesseract` and `pip3 install pillow numpy`). It reads the 88
+  journal entries and 57 tavern tales by OCR, crops the maps, and writes
+  `extracted/journal/` (kept out of git). Fix any OCR slip in
+  `journal.json`; its `fixes` section survives a re-run.
 * **Replaceable combat blocks**: every wall, door, floor and obstacle has a
   fixed id (`W1-01-03`, `D2-13-07`, `O-WILD-06`...). Drop
   `remake/art/blocks/<ID>.png` in to redraw one; see
@@ -67,6 +77,7 @@ python3 remake/krynn.py --size 1600x900    # or --fullscreen
 | ↓ / S | turn around (overland: south) |
 | L | search/look |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
+| J | the journal (entries and tavern tales found so far) |
 | F11 | full screen |
 | ESC | quit |
 
@@ -100,9 +111,9 @@ python3 tests/run_tests.py               # format and script checks against your
 
 ```
 cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, blocks, gamefiles, png
-tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py
+tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
-remake/kroc/    vm, world, app, combat (rules), encounter, combat_screen, art
+remake/kroc/    vm, world, app, combat (rules), encounter, combat_screen, art, journal
 docs/           FORMATS.md
 tests/          run_tests.py
 ```
