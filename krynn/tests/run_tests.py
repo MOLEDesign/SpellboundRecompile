@@ -84,7 +84,9 @@ def _throtl_world(gf):
             ans = None
             if r[0] == 'menu':
                 items = r[1]
-                if 'LEAVE' in items:
+                if 'ATTACK' in items:
+                    ans = items.index('ATTACK')     # the guards at Throtl's gate
+                elif 'LEAVE' in items:
                     ans = items.index('LEAVE')
                 elif 'YES' in items:
                     ans = 1 if w.vm.get_string(0x7B2C) in ('AN OUTPOST', 'WILD') else 0

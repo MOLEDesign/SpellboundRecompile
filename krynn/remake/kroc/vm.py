@@ -22,12 +22,14 @@ Memory map (word addresses, as the original engine):
     7C00-7FFF  more state; 7C00+ also reads the selected character
     8000-9DFF  the ECL block itself (bytes)
     C04B/C04C/C04D  party X, Y, facing (0..3)
+    C04F       flags byte of the party's map square (low 6 bits: room/area)
 """
 import random
 
 from cok.ecl import ECL_BASE, EclBlock
 
 POS_X, POS_Y, POS_DIR = 0xC04B, 0xC04C, 0xC04D
+SQUARE_FLAGS = 0xC04F         # GEO flags of the party's square: & 63 = room/area number
 IN_DUNGEON = 0x4BE6           # 0 = wilderness / overland, 1 = 3D
 LAST_BLOCK = 0x4BF2           # ECL block the party came from
 MAP_BLOCK = 0x4BC5            # GEO block loaded
@@ -61,6 +63,8 @@ class VM:
             return self.game.y
         if loc == POS_DIR:
             return self.game.facing // 2
+        if loc == SQUARE_FLAGS:
+            return self.game.square_flags()
         if 0x7C00 <= loc <= 0x7CFF:
             v = self.game.character_value(loc - 0x7C00)
             if v is not None:

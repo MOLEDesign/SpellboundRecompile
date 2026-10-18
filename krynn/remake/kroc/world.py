@@ -273,6 +273,11 @@ class World:
             x, y = x + DX[self.facing], y + DY[self.facing]
         return n
 
+    def square_flags(self):
+        if not self.in_dungeon or not self.geo:
+            return 0
+        return self.geo.squares[self.y][self.x].flags
+
     def wall_ahead(self, direction=None):
         d = self.facing if direction is None else direction
         return self.geo.wall(self.x, self.y, d) if self.geo else 0
