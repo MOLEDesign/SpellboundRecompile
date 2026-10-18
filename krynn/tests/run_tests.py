@@ -186,6 +186,87 @@ def test_missiles(gf):
     assert any('shoots' in ln for ln in b.log_lines), 'nobody shot'
 
 
+def test_spells(gf):
+    """Sleep, Magic Missile, Fireball friendly fire, Hold + coup de grace, charm, AI casting."""
+    import random
+    from kroc import encounter, spells as SP
+    from kroc.combat import Arena, Battle, Combatant, Attack, PARTY, ENEMY, DEAD
+
+    def setup(seed=1):
+        a = Arena(20, 12, 'F-DUNG')
+        mage = Combatant('MAGE', PARTY, 10, 10, 8, 19, [Attack(2, 1, 4)], 12, ('party', None))
+        mage.levels = {'C': 0, 'M': 5}
+        friend = Combatant('FIGHTER', PARTY, 30, 30, 3, 15, [Attack(2, 1, 8)], 12, ('party', None))
+        gobs = [Combatant('GOBLIN', ENEMY, 6, 6, 6, 20, [Attack(2, 1, 6)], 6, ('monster', 9, '1'))
+                for _ in range(4)]
+        ogre = Combatant('OGRE', ENEMY, 30, 30, 5, 15, [Attack(2, 1, 10)], 9, ('monster', 9, '1'))
+        ogre.hd = 5
+        b = Battle(a, [mage, friend], gobs + [ogre], random.Random(seed))
+        mage.x, mage.y, friend.x, friend.y = 2, 5, 3, 6
+        for k, g in enumerate(gobs):
+            g.x, g.y = 10 + k % 2, 5 + k // 2
+        ogre.x, ogre.y = 11, 7
+        return b, mage, friend, gobs, ogre
+
+    b, mage, friend, gobs, ogre = setup()
+    sleep = SP.spell(21)
+    mage.spells = [21, 15, 47, 47]
+    hit = SP.victims(b, mage, sleep, (10, 6))
+    assert set(gobs) <= set(hit) and ogre in hit
+    assert SP.problem(b, mage, sleep, (19, 6)).startswith('out of range')
+    SP.cast(b, mage, sleep, (10, 6))
+    assert all(g.has('asleep') for g in gobs) and not ogre.has('asleep'), 'ogre has too many HD'
+    assert mage.spells == [15, 47, 47] and SP.problem(b, mage, SP.spell(15), ogre) == 'already acted'
+    # helpless victims are slain outright in melee
+    friend.x, friend.y = 9, 5
+    b.attack(friend, gobs[0])
+    assert gobs[0].status == DEAD
+    # magic missile never misses; level 5 = 3 missiles
+    mage.attacked = False
+    before = ogre.hp
+    SP.cast(b, mage, SP.spell(15), ogre)
+    assert 6 <= before - ogre.hp <= 15
+    # fireball hits the friend standing in the blast too
+    mage.attacked = False
+    fb = SP.spell(47)
+    assert friend in SP.victims(b, mage, fb, (10, 6))
+    hp = friend.hp
+    SP.cast(b, mage, fb, (10, 6))
+    assert friend.hp < hp and gobs[1].status == DEAD
+    # the AI does not fireball its own side
+    b, mage, friend, gobs, ogre = setup(2)
+    mage.spells = [47]
+    friend.x, friend.y = 10, 4
+    pick = SP.choose(b, mage)
+    assert pick is None or friend not in SP.victims(b, mage, pick[0], pick[1])
+    # hold person, then charm: the ogre changes sides and back again
+    b, mage, friend, gobs, ogre = setup(3)
+    ogre.save_spell = 21                     # never saves
+    SP.spell(49).effect(b, mage, ogre, SP.spell(49), 5)
+    assert ogre.helpless and b.to_hit(friend, ogre) == 1.0
+    ogre.conditions.clear()
+    b.charm(ogre, mage, 2)
+    assert ogre in b.party and ogre.side == PARTY and ogre.auto
+    b.tick_magic(ogre)
+    b.tick_magic(ogre)
+    assert ogre in b.enemies and ogre.side == ENEMY
+    # a full fight with the real party's spells against Bozaks (casters)
+    w = _throtl_world(gf)
+    w.files.area = '1'
+    for ch in w.party:
+        ch.spells = list(ch.memorised)
+    b = encounter.build(w, [(4, 3, 0)], random.Random(5))
+    assert any(c.spells for c in b.party) and all(e.spells for e in b.enemies)
+    for c in b.party:
+        c.auto = True
+    _fight(b)
+    assert any(' casts ' in ln for ln in b.log_lines), 'nobody cast a spell'
+    b.finish()
+    assert sum(len(ch.spells) for ch in w.party) < sum(len(ch.memorised) for ch in w.party)
+    w.rest()
+    assert all(ch.spells == ch.memorised for ch in w.party if not ch.dead)
+
+
 def main():
     try:
         gf = GameFiles(sys.argv[1] if len(sys.argv) > 1 else None)

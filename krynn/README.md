@@ -38,6 +38,17 @@ it in Python, so its worst flaws can be fixed.
   line of sight, you can't shoot with an enemy next to you, dexterity
   helps the shot, and arrows are used up (half are gathered again after a
   victory, along with any thrown darts or javelins).
+* **Spells in combat**: the party casts what each character has memorised
+  (read from the save) and monster casters use their own spell lists, so a
+  Bozak really does throw Lightning Bolts and Stinking Clouds. Press M,
+  pick a spell, and aim it with the arrows or the mouse: before you cast,
+  the squares it covers are lit and every creature it will hit is
+  outlined, with a warning when a Fireball or Stinking Cloud would catch
+  your own people. Saving throws, Sleep's hit-dice limit, Hold and Sleep
+  victims being slain outright in melee, Charm switching sides, Mirror
+  Image, Haste and Slow, Bless and Prayer bonuses, Confusion and Fear all
+  work. Tags over each icon show who is asleep, held, charmed and so on.
+  Cast spells stay used until the party rests.
 * **The journal is in the game**: when the story says "you record it in
   journal entry 51" or "you hear tavern tale 12", that page of the manual
   opens on screen, maps and pictures included. Every entry the party finds
@@ -61,9 +72,10 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* spells in combat, morale and monster fleeing
-* items, treasure, shops, training, spells, resting rules (an inn heals
-  everyone fully)
+* morale and monster fleeing; spells outside combat (memorising, healing
+  on the move, Detect Magic...)
+* items, treasure, shops, training, resting rules (an inn heals everyone
+  fully and restores spells)
 * sound and music
 * saving and loading
 
@@ -95,6 +107,7 @@ In combat:
 | click a lit square | walk there |
 | T, RETURN | pick a target, attack it |
 | F, or click a distant enemy | shoot it (the dashed line shows a clear shot) |
+| M | cast a spell: choose it (arrows + RETURN, or its number), aim (arrows or mouse), RETURN or click to cast, ESC to go back |
 | B | bandage a dying friend next to you |
 | SPACE / G | end the turn |
 | U / shift+U | the computer plays this character / the whole party (again to stop) |
@@ -119,7 +132,7 @@ python3 tests/run_tests.py               # format and script checks against your
 cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, items, blocks, gamefiles, png
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
-remake/kroc/    vm, world, app, combat (rules), encounter, combat_screen, art, journal
+remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

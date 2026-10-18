@@ -77,6 +77,7 @@ class App:
         self.screen = pygame.Surface((W, H))          # the 1920x1080 frame
         self.font = pygame.font.Font(FONT, FONT_SIZE)
         self.small = pygame.font.Font(FONT, SMALL_SIZE)
+        self.tiny = pygame.font.Font(FONT, 20)
         self.clock = pygame.time.Clock()
         self.notes = []
         self.world = World(log=self.log, files=None if source is None else None)
@@ -514,6 +515,10 @@ class App:
                     self.key(ev)
                 elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
                     self.click(self.to_frame(ev.pos))
+                elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 3 and self.combat is not None:
+                    self.combat.cancel()
+                elif ev.type == pygame.MOUSEMOTION and self.combat is not None:
+                    self.combat.motion(self.to_frame(ev.pos))
                 elif ev.type == pygame.VIDEORESIZE and not self.fullscreen:
                     self.window_size = ev.size
                     self.window = self.open_window()

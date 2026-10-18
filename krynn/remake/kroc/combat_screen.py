@@ -8,6 +8,10 @@ Keys on your turn:
     RETURN or X                       attack the target (if next to you)
     F, or click a distant enemy       shoot the target (bow, sling, darts...)
     B                                 bandage a dying friend next to you
+    M                                 cast a spell: pick it from the list (arrows + RETURN,
+                                      or its number), then aim with the arrows or the
+                                      mouse; the squares and creatures it will hit are
+                                      shown before RETURN / click casts it. ESC cancels.
     G or SPACE                        end the turn (guard)
     U                                 let the computer play this character
     shift+U                           ... the whole party (U again to take back)
@@ -18,6 +22,7 @@ import time
 
 import pygame
 
+from . import spells as SP
 from .art import Art
 from .combat import ENEMY, PARTY, OK, DYING, DEAD, FLED
 
@@ -49,6 +54,7 @@ class CombatScreen:
         self.b = battle
         self.font = app.font
         self.small = app.small
+        self.tiny = getattr(app, "tiny", None) or pygame.font.Font(None, 24)
         self.art = Art(app.world, app.small)
         self.zoom = 1               # V: zoom in 2x around the active combatant
         self.ai = None
@@ -62,6 +68,8 @@ class CombatScreen:
         self.reach = {}
         self.auto_all = False
         self.hover = None
+        self.casting = None         # {'list': [...], 'i': n} or {'spell': Spell, 'aim': cell}
+        self.blast = None           # (until, cells, colour): a spell going off
         self.begin_turn()
 
     # --------------------------------------------------------------- turn flow
@@ -74,7 +82,8 @@ class CombatScreen:
         if c is None:
             self.finish()
             return
-        if c.side == ENEMY or c.auto or self.auto_all:
+        self.casting = None
+        if c.side == ENEMY or self.b.controlled_by_ai(c) or self.auto_all:
             self.ai = self.b.ai_turn(c)
             self.next_ai = time.time() + 0.25
         else:
@@ -88,7 +97,8 @@ class CombatScreen:
         if self.target not in foes:
             self.target = min(foes, key=lambda f: self.b.distance(c, f)) if foes else None
         can_shoot = c is not None and self.b.shoot_target(c) is not None
-        if c and c.side == PARTY and (c.attacked or (c.half_moves < 2 and not can_shoot
+        can_cast = c is not None and bool(self.castable(c))
+        if c and c.side == PARTY and (c.attacked or (c.half_moves < 2 and not can_shoot and not can_cast
                                                      and not any(self.b.adjacent(c, f) for f in foes))):
             self.end_turn()
 
@@ -124,6 +134,10 @@ class CombatScreen:
         if kind == 'attack':
             self.flash[self.cur] = time.time() + ATTACK_DELAY
             self.next_ai = time.time() + ATTACK_DELAY
+        elif kind == 'cast':
+            sp, target = what
+            self.show_blast(self.cur, sp, target)
+            self.next_ai = time.time() + 0.9
         elif kind == 'shoot':
             self.launch(self.cur, what)
             self.next_ai = time.time() + SHOT_TIME * self.cur.missile.shots + 0.2
@@ -156,7 +170,12 @@ class CombatScreen:
             return
         if self.ai is not None or c is None or c.side != PARTY:
             return
-        if ev.key in DIRS:
+        if self.casting is not None:
+            self.cast_key(ev)
+            return
+        if ev.key == pygame.K_m:
+            self.open_spells()
+        elif ev.key in DIRS:
             dx, dy = DIRS[ev.key]
             self.move_or_attack(dx, dy)
         elif ev.key == pygame.K_t:
@@ -181,6 +200,123 @@ class CombatScreen:
                 self.end_turn()
             else:
                 self.b.log('Move to the edge of the field to flee.')
+
+    # --------------------------------------------------------------- spells
+    def castable(self, c):
+        """Distinct combat spells c still has, in the order memorised."""
+        out = []
+        for sid in c.spells:
+            sp = SP.spell(sid)
+            if sp is not None and sp.combat and sp not in out:
+                out.append(sp)
+        return out
+
+    def open_spells(self):
+        c = self.cur
+        options = self.castable(c)
+        if not options:
+            self.b.log('%s has no combat spells left.' % c.name)
+            return
+        self.casting = {'list': options, 'i': 0}
+
+    def cancel(self):
+        if self.casting is not None:
+            self.casting = None
+
+    def cast_key(self, ev):
+        st, c = self.casting, self.cur
+        if ev.key == pygame.K_ESCAPE:
+            # from aiming, step back to the list
+            self.casting = {'list': self.castable(c), 'i': 0} if 'spell' in st else None
+            return
+        if 'list' in st:
+            n = len(st['list'])
+            if ev.key in (pygame.K_UP, pygame.K_KP8, pygame.K_w):
+                st['i'] = (st['i'] - 1) % n
+            elif ev.key in (pygame.K_DOWN, pygame.K_KP2, pygame.K_s):
+                st['i'] = (st['i'] + 1) % n
+            elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.pick_spell(st['list'][st['i']])
+            elif ev.unicode.isdigit() and 0 < int(ev.unicode) <= n:
+                self.pick_spell(st['list'][int(ev.unicode) - 1])
+            return
+        if ev.key in DIRS:
+            dx, dy = DIRS[ev.key]
+            x, y = st['aim'][0] + dx, st['aim'][1] + dy
+            if self.b.arena.inside(x, y):
+                st['aim'] = (x, y)
+        elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) or ev.unicode.lower() == 'x':
+            self.do_cast()
+
+    def pick_spell(self, sp):
+        c = self.cur
+        why = SP.problem(self.b, c, sp)
+        if why is not None:
+            self.b.log('Cannot cast %s: %s.' % (sp.name, why))
+            return
+        if not sp.needs_target:
+            self.casting = {'spell': sp, 'aim': (c.x, c.y)}
+            self.do_cast()
+            return
+        if sp.shape == 'ally' or sp.shape == 'square' or self.target is None:
+            aim = (c.x, c.y)
+        else:
+            aim = (self.target.x, self.target.y)
+        self.casting = {'spell': sp, 'aim': aim}
+
+    def aim_target(self):
+        """What the spell being aimed is aimed at: a Combatant or a cell."""
+        st = self.casting
+        sp = st['spell']
+        if sp.shape in ('ally', 'enemy'):
+            o = self.b.occupant(*st['aim'])
+            return o if o is not None and o.present else None
+        if sp.shape == 'self' or sp.shape == 'party':
+            return None
+        return st['aim']
+
+    def aim_problem(self):
+        sp, t = self.casting['spell'], self.aim_target()
+        if sp.needs_target and t is None:
+            return 'no one there' if sp.shape in ('ally', 'enemy') else 'no target'
+        if sp.shape in ('line', 'cone') and t == (self.cur.x, self.cur.y):
+            return 'aim away from yourself'
+        return SP.problem(self.b, self.cur, sp, t)
+
+    def do_cast(self):
+        c, sp = self.cur, self.casting['spell']
+        why = self.aim_problem()
+        if why is not None:
+            self.b.log('Cannot cast %s: %s.' % (sp.name, why))
+            return
+        t = self.aim_target()
+        self.casting = None
+        self.show_blast(c, sp, t)
+        SP.cast(self.b, c, sp, t)
+        if self.b.check_end():
+            self.finish()
+            return
+        self.refresh()
+
+    def show_blast(self, c, sp, target):
+        if sp.shape in ('self', 'party', 'ally', 'enemy', 'square'):
+            cells = [p for v in SP.victims(self.b, c, sp, target) for p in v.cells()]
+            if sp.shape == 'square':
+                cells = [target]
+        else:
+            cells = SP.area_cells(self.b, c, sp, target)
+        colour = (255, 120, 40, 110) if sp.hostile else (90, 170, 255, 100)
+        self.blast = (time.time() + 0.8, cells, colour)
+
+    def motion(self, pos):
+        if self.casting is not None and 'list' in self.casting:
+            i = self.list_row_at(pos)
+            if i is not None:
+                self.casting['i'] = i
+        elif self.casting is not None and 'spell' in self.casting:
+            cell = self.cell_at(pos)
+            if cell is not None:
+                self.casting['aim'] = cell
 
     def move_or_attack(self, dx, dy):
         c = self.cur
@@ -243,6 +379,17 @@ class CombatScreen:
             return
         c = self.cur
         if c is None or c.side != PARTY or self.ai is not None:
+            return
+        if self.casting is not None:
+            if 'list' in self.casting:
+                i = self.list_row_at(pos)
+                if i is not None:
+                    self.pick_spell(self.casting['list'][i])
+                return
+            cell = self.cell_at(pos)
+            if cell is not None:
+                self.casting['aim'] = cell
+                self.do_cast()
             return
         cell = self.cell_at(pos)
         if cell is None:
@@ -324,9 +471,22 @@ class CombatScreen:
                     continue
                 ov.fill((80, 160, 255, 32) if (x, y) not in threat else (255, 120, 60, 64))
                 screen.blit(ov, self.to_px(x, y))
+        now = time.time()
+        if self.casting is not None and 'spell' in self.casting:
+            self.draw_aim(screen, cp)
+        if self.blast is not None:
+            until, cells, colour = self.blast
+            if now < until:
+                ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
+                ov.fill(colour)
+                for p in cells:
+                    screen.blit(ov, self.to_px(*p))
+            else:
+                self.blast = None
         # the line of a possible shot at the target
         cur, t = self.cur, self.target
         if cur is not None and cur.side == PARTY and self.ai is None and t is not None and t.active \
+                and self.casting is None \
                 and cur.missile is not None and self.b.fire_problem(cur, t) is None:
             a = self.to_px(cur.x, cur.y)
             b = self.to_px(t.x, t.y)
@@ -365,8 +525,9 @@ class CombatScreen:
             if c is self.cur:
                 pulse = 3 + 2 * (int(now * 4) % 2)
                 pygame.draw.rect(screen, HILITE, (px, py, w, h), pulse)
-            elif c is self.target and self.cur and self.cur.side == PARTY:
+            elif c is self.target and self.cur and self.cur.side == PARTY and self.casting is None:
                 pygame.draw.rect(screen, BAD, (px, py, w, h), 3)
+            self.draw_marks(screen, c, px, py, w)
         self.draw_shots(screen, now)
         screen.set_clip(None)
         pygame.draw.rect(screen, FRAME, v.inflate(12, 12), 3)
@@ -374,6 +535,50 @@ class CombatScreen:
         self.draw_log(screen)
         if self.summary is not None:
             self.draw_summary(screen)
+
+    MARKS = (('asleep', 'Zz', (150, 190, 255)), ('held', 'HELD', (255, 210, 90)),
+             ('nauseated', 'SICK', (150, 220, 90)), ('charmed', 'CHARM', (255, 140, 220)),
+             ('confused', '???', (255, 160, 60)), ('afraid', 'FEAR', (255, 255, 255)),
+             ('slowed', 'SLOW', (170, 170, 170)), ('hasted', 'FAST', (120, 255, 200)),
+             ('silenced', 'MUTE', (200, 200, 200)), ('invisible', 'INVIS', (180, 220, 255)))
+
+    def draw_marks(self, screen, c, px, py, w):
+        """Small tags over a combatant for the spells affecting it."""
+        tags = [(t, col) for k, t, col in self.MARKS if c.has(k)]
+        if c.images:
+            tags.append(('x%d' % c.images, (200, 200, 255)))
+        if c.effects:
+            good = any(sum(m.values()) > 0 for _, _, m in c.effects)
+            tags.append(('+' if good else '-', GOOD if good else BAD))
+        x = px + 2
+        for text, col in tags[:3]:
+            img = self.tiny.render(text, True, col)
+            bg = pygame.Surface((img.get_width() + 4, img.get_height()), pygame.SRCALPHA)
+            bg.fill((0, 0, 0, 170))
+            screen.blit(bg, (x, py + 1))
+            screen.blit(img, (x + 2, py + 1))
+            x += img.get_width() + 6
+
+    def draw_aim(self, screen, cp):
+        """The squares the spell would cover and who it would hit."""
+        c, sp = self.cur, self.casting['spell']
+        t = self.aim_target()
+        bad = self.aim_problem()
+        if sp.shape in ('area', 'foes', 'line', 'cone'):
+            cells = SP.area_cells(self.b, c, sp, self.casting['aim'])
+            ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            ov.fill((120, 120, 120, 70) if bad else
+                    ((255, 120, 40, 80) if sp.hostile else (90, 170, 255, 80)))
+            for p in cells:
+                screen.blit(ov, self.to_px(*p))
+        if not bad:
+            for v in SP.victims(self.b, c, sp, t):
+                px, py = self.to_px(v.x, v.y)
+                friend = v.side == c.side
+                col = (HILITE if sp.hostile else GOOD) if friend else BAD
+                pygame.draw.rect(screen, col, (px - 2, py - 2, v.w * cp + 4, v.h * cp + 4), 4)
+        px, py = self.to_px(*self.casting['aim'])
+        pygame.draw.rect(screen, (120, 120, 120) if bad else (255, 255, 255), (px, py, cp, cp), 2)
 
     def draw_shots(self, screen, now):
         live = []
@@ -432,6 +637,13 @@ class CombatScreen:
                     left = m.left()
                     put('range %d%s' % (m.range, '' if left is None else ', %d %s' % (left, m.ammo_name)), DIM)
                     y += 36
+                spells = [x for x in c.spells if SP.spell(x) and SP.spell(x).combat]
+                if spells:
+                    put('M: cast a spell (%d left)' % len(spells), GOOD if not c.attacked else DIM)
+                    y += 36
+        if self.casting is not None and c is not None:
+            self.draw_spell_panel(screen, r, y)
+            return
         t = self.target
         if t is not None and t.active and c is not None and c.side == PARTY:
             y += 8
@@ -451,6 +663,88 @@ class CombatScreen:
                                                      int(round(self.b.missile_to_hit(c, t) * 100))), GOOD)
                 else:
                     put('cannot shoot: ' + why, DIM)
+
+    LIST_ROW = 36
+
+    def list_row_at(self, pos):
+        st = self.casting
+        if not st or 'list' not in st or 'top' not in st:
+            return None
+        x, y = pos
+        if not self.PANEL.collidepoint(pos) or y < st['top']:
+            return None
+        i = (y - st['top']) // self.LIST_ROW
+        return i if 0 <= i < len(st['list']) else None
+
+    def draw_spell_panel(self, screen, r, y):
+        c, st = self.cur, self.casting
+        x = r.x + 20
+        y += 8
+        if 'list' in st:
+            screen.blit(self.small.render('CAST WHICH SPELL?', True, HILITE), (x, y))
+            y += 40
+            st['top'] = y
+            for i, sp in enumerate(st['list']):
+                n = c.spells.count(sp.id)
+                why = SP.problem(self.b, c, sp)
+                col = HILITE if i == st['i'] else (TEXT if why is None else DIM)
+                if i == st['i']:
+                    pygame.draw.rect(screen, (50, 50, 90), (r.x + 8, y - 2, r.w - 16, self.LIST_ROW))
+                label = '%d %s' % (i + 1, sp.name) if i < 9 else '  ' + sp.name
+                screen.blit(self.small.render(label[:24], True, col), (x, y))
+                t = self.small.render('x%d  L%d' % (n, sp.level), True, DIM)
+                screen.blit(t, (r.right - 20 - t.get_width(), y))
+                y += self.LIST_ROW
+                if y > r.bottom - 80:
+                    break
+            sp = st['list'][st['i']]
+            y = r.bottom - 74
+            screen.blit(self.small.render(self.describe(sp)[:34], True, DIM), (x, y))
+            screen.blit(self.small.render('RETURN choose   ESC back', True, DIM), (x, y + 34))
+            return
+        sp = st['spell']
+        screen.blit(self.small.render(sp.name.upper()[:26], True, HILITE), (x, y))
+        y += 38
+        screen.blit(self.small.render(self.describe(sp)[:34], True, DIM), (x, y))
+        y += 44
+        why = self.aim_problem()
+        if why is not None:
+            screen.blit(self.small.render('Cannot: ' + why, True, BAD), (x, y))
+        else:
+            hit = SP.victims(self.b, c, sp, self.aim_target())
+            foes = [v for v in hit if v.side != c.side]
+            friends = [v for v in hit if v.side == c.side]
+            if foes:
+                screen.blit(self.small.render('Foes: %d' % len(foes), True, BAD), (x, y))
+                y += 34
+                for v in foes[:3 if friends else 5]:
+                    screen.blit(self.small.render('  ' + v.name[:22], True, TEXT), (x, y))
+                    y += 32
+            if friends:
+                if sp.hostile:
+                    text, col = 'WARNING: hits %d friend%s' % (len(friends), 's' * (len(friends) > 1)), HILITE
+                else:
+                    text, col = 'Friends: %d' % len(friends), GOOD
+                screen.blit(self.small.render(text, True, col), (x, y))
+                y += 34
+                for v in friends[:3]:
+                    screen.blit(self.small.render('  ' + v.name[:22], True, TEXT), (x, y))
+                    y += 32
+            if not hit:
+                screen.blit(self.small.render('No one is in the area.', True, DIM), (x, y))
+        screen.blit(self.small.render('aim: arrows or mouse', True, DIM), (x, r.bottom - 74))
+        screen.blit(self.small.render('RETURN/click cast  ESC back', True, DIM), (x, r.bottom - 40))
+
+    @staticmethod
+    def describe(sp):
+        shape = {'self': 'on yourself', 'party': 'on the whole party', 'ally': 'on a friend',
+                 'enemy': 'on one foe', 'foes': 'on foes in an area',
+                 'area': 'everyone in the area', 'line': 'a bolt', 'cone': 'a cone',
+                 'square': 'to an empty square'}[sp.shape]
+        rng = '' if sp.shape in ('self', 'party') else (
+            ', touch' if sp.range <= 1 and sp.shape in ('ally', 'enemy') else
+            (', length %d' % sp.length if sp.shape in ('line', 'cone') else ', range %d' % sp.range))
+        return shape + rng
 
     def draw_log(self, screen):
         r = self.LOG
@@ -472,8 +766,8 @@ class CombatScreen:
         for ln in rows[-n:]:
             screen.blit(self.small.render(ln, True, TEXT), (r.x + 16, y))
             y += 34
-        help_ = ('arrows/QEZC move   bump or click: attack   F shoot   T target   B bandage   '
-                 'SPACE end turn   U auto   L flee   V zoom')
+        help_ = ('arrows/QEZC move   bump or click: attack   F shoot   M magic   T target   '
+                 'B bandage   SPACE end turn   U auto   L flee   V zoom')
         screen.blit(self.small.render(help_, True, DIM), (self.VIEW.x, self.VIEW.bottom + 14))
 
     def draw_summary(self, screen):

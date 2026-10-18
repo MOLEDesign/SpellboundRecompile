@@ -119,6 +119,30 @@ class Character:
         self.weapon = (r[0x1A0] or 1, r[0x1A2] or 4, _s8(r[0x1A5]))
         self.move = r[0x1A9] or 12
         self.icon = dict(head=r[0x141], body=r[0x142], size=r[0x144] or 2, colours=bytes(r[0x146:0x14C]))
+        # 0x1E-0x59 memorised spells (1-94; higher numbers are not spells); 0xFE-0x105
+        # levels: cleric, druid, fighter, paladin, ranger, magic-user, thief, knight
+        self.memorised = [x for x in r[0x1E:0x5A] if 1 <= x <= 94]
+        self.spells = list(self.memorised)        # still available until the next rest
+        self.levels = dict(zip(self.CLASSES, r[0xFE:0x106]))
+
+    CLASSES = ('cleric', 'druid', 'fighter', 'paladin', 'ranger', 'magic-user', 'thief', 'knight')
+    # d20 needed to save against spells, by class and level (AD&D tables)
+    SAVE_SPELL = {'cleric': (15, 15, 15, 14, 14, 14, 12, 12, 12, 11),
+                  'magic-user': (12, 12, 12, 12, 12, 10, 10, 10, 10, 10),
+                  'thief': (15, 15, 15, 15, 13, 13, 13, 13, 11, 11),
+                  'fighter': (17, 17, 16, 16, 14, 14, 13, 13, 11, 11)}
+
+    @property
+    def save_spell(self):
+        best = 17
+        for cls, lv in self.levels.items():
+            if lv:
+                table = self.SAVE_SPELL.get(cls, self.SAVE_SPELL['fighter'])
+                n = table[min(lv, len(table)) - 1]
+                if cls == 'paladin':
+                    n -= 2
+                best = min(best, n)
+        return best
 
 
 class World:
@@ -180,6 +204,7 @@ class World:
         for c in self.party:
             if not c.dead:
                 c.hp = c.hp_max
+                c.spells = list(c.memorised)
 
     def advance_clock(self, n):
         self.clock += n

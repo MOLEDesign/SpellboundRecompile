@@ -60,6 +60,10 @@ def monster_combatant(world, mid, n, icon=None):
         size = (max(1, ready.width // 24), max(1, ready.height // 24))
     c = Combatant(name, ENEMY, hp, hp, 60 - rec[0x113], 60 - rec[0x59], attacks, move,
                   ('monster', icon, area), size=size, xp=rec[0x130] | rec[0x131] << 8)
+    c.spells = [x for x in rec[0x1E:0x59] if 1 <= x <= 94]
+    c.hd = rec[0xD6] or 1
+    c.levels = {'C': c.hd, 'M': c.hd}
+    c.save_spell = rec[0xD4] or 16
     its = world.files.monster_items(mid, area)
     c.missile = make_missile(its, world.files.item_types(), c.thac0)
     if c.missile is not None and c.missile.ammo is not None:
@@ -74,6 +78,12 @@ def party_combatant(ch, types=None):
     if types:
         c.missile = make_missile(ch.items, types,
                                  ch.base_thac0 - I.dex_missile_bonus(ch.stats.get('DEX', 10)))
+    c.spells = ch.spells               # the same list: spells cast stay used until a rest
+    lv = ch.levels
+    c.levels = {'C': max(lv.get('cleric', 0), lv.get('druid', 0), lv.get('paladin', 0) - 8),
+                'M': max(lv.get('magic-user', 0), lv.get('ranger', 0) - 8)}
+    c.hd = max(lv.values() or [1]) or 1
+    c.save_spell = ch.save_spell
     if ch.dead:
         c.status = DEAD
     elif ch.hp <= 0:

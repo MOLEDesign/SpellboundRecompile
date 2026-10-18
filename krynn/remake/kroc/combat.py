@@ -29,6 +29,10 @@ import random
 from cok.geo import DX, DY
 
 PARTY, ENEMY = 'party', 'enemy'
+CONDITION_WORDS = {'asleep': 'asleep', 'held': 'held', 'nauseated': 'helpless with nausea',
+                   'slowed': 'slowed', 'hasted': 'hasted', 'confused': 'confused',
+                   'afraid': 'afraid', 'silenced': 'silenced', 'charmed': 'charmed',
+                   'invisible': 'invisible'}
 OK, DYING, DEAD, FLED = 'ok', 'dying', 'dead', 'fled'
 
 # 8 neighbour steps: (dx, dy, half-move cost)
@@ -101,11 +105,38 @@ class Combatant:
         self.guarding = False
         self.aoo_used = False
         self.missile = None             # Missile, if it can shoot
+        # magic
+        self.spells = []                # memorised spell ids still available
+        self.levels = {'C': 0, 'M': 0}  # caster levels: cleric, magic-user
+        self.hd = 1                     # hit dice / level (sleep, hold...)
+        self.save_spell = 16            # d20 roll needed to save against spells
+        self.effects = []               # [name, rounds, {hit/ac/dmg/save: n}]
+        self.conditions = {}            # name -> rounds left: asleep, held, slowed ...
+        self.images = 0                 # mirror images left
+        self.cast_this_turn = False
 
     @property
     def active(self):
         return self.status == OK
 
+    # --- magic state -------------------------------------------------------------
+    def mod(self, key):
+        return sum(m.get(key, 0) for _, _, m in self.effects)
+
+    @property
+    def eff_ac(self):
+        return self.ac - self.mod('ac')
+
+    @property
+    def helpless(self):
+        return any(k in self.conditions for k in ('asleep', 'held', 'nauseated'))
+
+    @property
+    def can_act(self):
+        return self.active and not self.helpless
+
+    def has(self, cond):
+        return cond in self.conditions
     @property
     def present(self):
         return self.status in (OK, DYING)
@@ -331,8 +362,25 @@ class Battle:
                     self.log('%s dies.' % c.name)
             c.aoo_used = False
             c.init = self.rng.randint(1, 6)
+            self.tick_magic(c)
         self.order = sorted((c for c in self.all if c.active), key=lambda c: (c.init, c.side == ENEMY))
         self.log('-- Round %d --' % self.round)
+
+    def tick_magic(self, c):
+        """Count down spell effects at the start of a round."""
+        for e in list(c.effects):
+            e[1] -= 1
+            if e[1] <= 0:
+                c.effects.remove(e)
+        for k in list(c.conditions):
+            c.conditions[k] -= 1
+            if c.conditions[k] <= 0:
+                del c.conditions[k]
+                if k == 'charmed':
+                    self.uncharm(c)
+                    continue
+                if c.active:
+                    self.log('%s is no longer %s.' % (c.name, CONDITION_WORDS.get(k, k)))
 
     def next_turn(self):
         """Advance to the next combatant that can act; None when the fight is over."""
@@ -345,11 +393,16 @@ class Battle:
                 if not self.order:
                     return None
             c = self.order.pop(0)
-            if c.active:
+            if c.active and not c.helpless:
                 c.half_moves = 2 * c.move
+                if c.has('hasted'):
+                    c.half_moves *= 2
+                if c.has('slowed'):
+                    c.half_moves //= 2
                 c.attacks_left = sum(a.half for a in c.attacks)
                 c.attacked = False
                 c.guarding = False
+                c.cast_this_turn = False
                 self.turn = c
                 return c
 
@@ -424,11 +477,42 @@ class Battle:
         c.x, c.y = nx, ny
         c.half_moves -= cost
         for e in before:
-            if c.active and e.active and not self.adjacent(e, c) and not e.aoo_used:
+            if c.active and e.can_act and not self.adjacent(e, c) and not e.aoo_used:
                 e.aoo_used = True
                 self.log('%s gets a free attack.' % e.name)
                 self.attack(e, c, free=True)
         return True
+
+    # --- charm ------------------------------------------------------------------------
+    def charm(self, t, caster, rounds):
+        """t fights for the caster's side until the charm ends or is dispelled."""
+        if t.side == caster.side:
+            return
+        if not hasattr(t, 'home'):
+            t.home, t.home_auto = t.side, t.auto
+        (self.party if t.side == PARTY else self.enemies).remove(t)
+        (self.party if caster.side == PARTY else self.enemies).append(t)
+        t.side = caster.side
+        t.auto = True
+        t.conditions['charmed'] = rounds
+        self.log('%s is charmed by %s!' % (t.name, caster.name))
+        self.check_end()
+
+    def uncharm(self, t):
+        t.conditions.pop('charmed', None)
+        home = getattr(t, 'home', None)
+        if home is None or home == t.side:
+            return
+        (self.party if t.side == PARTY else self.enemies).remove(t)
+        (self.party if home == PARTY else self.enemies).append(t)
+        t.side, t.auto = home, t.home_auto
+        del t.home, t.home_auto
+        if t.present:
+            self.log('%s comes to their senses.' % t.name)
+
+    def controlled_by_ai(self, c):
+        """Monsters, party members on auto, and anyone confused or terrified."""
+        return c.auto or c.has('confused') or c.has('afraid')
 
     def flee(self, c):
         c.status = FLED
@@ -436,20 +520,52 @@ class Battle:
         return True
 
     # --- attacks --------------------------------------------------------------------
+    def need(self, a, d, thac0=None, penalty=0):
+        """d20 roll a needs to hit d (spell effects included)."""
+        thac0 = a.thac0 if thac0 is None else thac0
+        n = thac0 - a.mod('hit') - d.eff_ac + penalty
+        if d.has('invisible'):
+            n += 4
+        return max(2, min(20, n))
+
     def to_hit(self, a, d):
         """Chance (0..1) that a hits d with one swing."""
-        need = a.thac0 - d.ac
-        need = max(2, min(20, need))
-        return (21 - need) / 20.0
+        if d.helpless:
+            return 1.0
+        return (21 - self.need(a, d)) / 20.0
+
+    def swing(self, a, d, atk, thac0=None, penalty=0, melee=True, verb='hits'):
+        """One blow or shot of a at d; returns True on a hit."""
+        if melee and d.helpless and d.side != a.side:
+            # the Gold Box coup de grace: a helpless victim in melee dies
+            self.damage(d, d.hp + (10 if d.side == PARTY else 0),
+                        '%s slays the helpless %s.' % (a.name, d.name))
+            return True
+        r = self.rng.randint(1, 20)
+        if d.helpless or r == 20 or (r != 1 and r >= self.need(a, d, thac0, penalty)):
+            if d.images > 0 and self.rng.randrange(d.images + 1) > 0:
+                d.images -= 1
+                self.log('%s strikes one of %s\'s images.' % (a.name, d.name))
+                return False
+            dmg = max(1, roll(self.rng, atk.dice, atk.size, atk.bonus) + a.mod('dmg'))
+            self.damage(d, dmg, '%s %s %s for %d.' % (a.name, verb, d.name, dmg))
+            return True
+        self.log(('%s misses %s.' if melee else '%s shoots at %s and misses.') % (a.name, d.name))
+        return False
 
     def attack(self, a, d, free=False):
         """One attack round of a against d (all of a's attacks, or one when free)."""
         if not free:
             a.attacked = True
             a.half_moves = 0
+            a.conditions.pop('invisible', None)
         swings = []
         for atk in a.attacks:
             n = max(1, atk.half // 2) if not free else 1
+            if not free and a.has('hasted'):
+                n *= 2
+            if not free and a.has('slowed'):
+                n = max(1, n // 2)
             swings += [atk] * n
             if free:
                 break
@@ -458,18 +574,14 @@ class Battle:
         for atk in swings:
             if not d.present or d.status == DYING and d.side == ENEMY:
                 break
-            r = self.rng.randint(1, 20)
-            need = a.thac0 - d.ac
-            if r == 20 or (r != 1 and r >= need):
-                dmg = max(1, roll(self.rng, atk.dice, atk.size, atk.bonus))
-                self.damage(d, dmg, '%s hits %s for %d.' % (a.name, d.name, dmg))
-            else:
-                self.log('%s misses %s.' % (a.name, d.name))
+            self.swing(a, d, atk)
         self.check_end()
 
     def damage(self, d, n, text):
         d.hp -= n
         self.log(text)
+        if d.conditions.pop('asleep', None) and d.hp > 0:
+            self.log('%s wakes up!' % d.name)
         if d.hp <= 0 and d.status == OK:
             if d.side == ENEMY or d.hp <= -10:
                 d.status = DEAD
@@ -517,7 +629,7 @@ class Battle:
             return 'already attacked'
         if m.left() is not None and m.left() <= 0:
             return 'out of ' + (m.ammo_name or 'ammunition')
-        if any(self.adjacent(a, f) for f in self.foes(a)):
+        if any(self.adjacent(a, f) for f in self.foes(a) if f.can_act):
             return 'an enemy is next to you'
         if self.distance(a, d) > m.range:
             return 'out of range (%d)' % m.range
@@ -527,8 +639,9 @@ class Battle:
 
     def missile_to_hit(self, a, d):
         m = a.missile
-        need = m.thac0 - d.ac + (2 if self.distance(a, d) > m.range // 2 else 0)
-        need = max(2, min(20, need))
+        if d.helpless:
+            return 1.0
+        need = self.need(a, d, m.thac0, 2 if self.distance(a, d) > m.range // 2 else 0)
         return (21 - need) / 20.0
 
     def fire(self, a, d):
@@ -536,8 +649,12 @@ class Battle:
         m = a.missile
         a.attacked = True
         a.half_moves = 0
+        a.conditions.pop('invisible', None)
         long_range = self.distance(a, d) > m.range // 2
-        for _ in range(m.shots):
+        shots = m.shots * (2 if a.has('hasted') else 1)
+        if a.has('slowed'):
+            shots = max(1, shots // 2)
+        for _ in range(shots):
             if not d.present or (d.status == DYING and d.side == ENEMY):
                 break
             if m.left() is not None:
@@ -546,13 +663,10 @@ class Battle:
                     break
                 m.ammo.quantity -= 1
             m.fired += 1
-            r = self.rng.randint(1, 20)
-            need = m.thac0 - d.ac + (2 if long_range else 0)
-            if r == 20 or (r != 1 and r >= need):
-                dmg = max(1, roll(self.rng, m.attack.dice, m.attack.size, m.attack.bonus))
-                self.damage(d, dmg, '%s shoots %s for %d.' % (a.name, d.name, dmg))
-            else:
-                self.log('%s shoots at %s and misses.' % (a.name, d.name))
+            if d.has('missile_proof'):
+                self.log('The missile cannot harm %s.' % d.name)
+                continue
+            self.swing(a, d, m.attack, m.thac0, 2 if long_range else 0, melee=False, verb='shoots')
         self.check_end()
 
     def shoot_target(self, c):
@@ -571,9 +685,28 @@ class Battle:
 
     # --- simple AI (monsters, and party members on auto) -------------------------------
     def ai_turn(self, c):
-        """Generator of ('move', (x, y)) / ('attack', target) as the AI acts."""
+        """Generator of ('move', (x, y)) / ('attack', target) / ('shoot', target) /
+        ('cast', (spell, target)) as the AI acts."""
+        from . import spells
+        if c.has('afraid'):
+            yield from self.run_away(c)
+            return
+        if c.has('confused'):
+            roll_ = self.rng.randint(1, 10)
+            if roll_ <= 2:
+                yield from self.wander(c)
+                return
+            if roll_ <= 5:
+                self.log('%s stands confused.' % c.name)
+                c.attacked = True
+                return
         foes = self.foes(c)
         if not foes:
+            return
+        pick = spells.choose(self, c)
+        if pick is not None:
+            yield ('cast', pick)
+            spells.cast(self, c, *pick)
             return
         if any(self.adjacent(c, f) for f in foes):
             target = min((f for f in foes if self.adjacent(c, f)), key=lambda f: f.hp)
@@ -616,6 +749,33 @@ class Battle:
                 yield ('shoot', t)
                 self.fire(c, t)
 
+    def run_away(self, c):
+        """Move as far from the nearest foes as this turn allows."""
+        foes = self.foes(c)
+        r = self.reachable(c)
+        if foes and r:
+            cell = max(r, key=lambda p: (min(self.distance_cells(c, p, f) for f in foes), -r[p][0]))
+            for p in self.path_to(c, cell) or []:
+                if not self.step(c, p[0] - c.x, p[1] - c.y):
+                    break
+                yield ('move', p)
+                if not c.active:
+                    return
+        c.attacked = True
+        if c.active:
+            self.log('%s cowers in fear.' % c.name)
+
+    def wander(self, c):
+        self.log('%s wanders about in confusion.' % c.name)
+        for _ in range(self.rng.randint(1, 3)):
+            dx, dy, _cost = self.rng.choice(STEPS)
+            if not self.step(c, dx, dy):
+                break
+            yield ('move', (c.x, c.y))
+            if not c.active:
+                return
+        c.attacked = True
+
     def distance_cells(self, c, cell, f):
         return min(max(abs(cx - fx), abs(cy - fy))
                    for cx, cy in c.cells(*cell) for fx, fy in f.cells())
@@ -623,6 +783,8 @@ class Battle:
     # --- end of fight --------------------------------------------------------------
     def finish(self):
         """Apply the outcome to the party; returns experience per survivor."""
+        for c in list(self.all):
+            self.uncharm(c)
         each = 0
         if self.result == 'won':
             total = sum(e.xp for e in self.enemies if e.status == DEAD)

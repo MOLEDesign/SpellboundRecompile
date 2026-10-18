@@ -94,9 +94,10 @@ Monster records (`MONnCHA.DAX`, 409 bytes, id = monster number):
 |--------|-------|
 | 0x00 | name (length byte + 15 chars) |
 | 0x10 | six stat pairs (current, maximum) |
+| 0x1E-0x58 | spells it can cast (game spell numbers 1-94, 0 = none) |
 | 0x59 | 60 - THAC0 |
 | 0x62 | hit points |
-| 0xD0 | five saving throws |
+| 0xD0 | five saving throws (0xD4: against spells) |
 | 0xD5 | movement (flying speeds included) |
 | 0xD6 | hit dice |
 | 0x10B/0x10C | half-attacks per round of attack groups 1 and 2 |
@@ -107,7 +108,10 @@ Monster records (`MONnCHA.DAX`, 409 bytes, id = monster number):
 For example, black dragon: 1d4/1d4 claws (4 half-attacks), 3d6 bite, AC 3.
 
 Party records (`save/CHRDATAn.SAV`, 426 bytes) use a shifted layout:
-0x00 name, 0x10 stats, 0x64 maximum HP, 0x141-0x14B combat icon (head,
+0x00 name, 0x10 stats, 0x1E-0x59 memorised spells (1-94; larger values are
+not spells), 0x5A 60 - base THAC0, 0x5B race, 0x5C class, 0x64 maximum HP,
+0xFE-0x105 levels (cleric, druid, fighter, paladin, ranger, magic-user,
+thief, knight), 0x141-0x14B combat icon (head,
 body, slot, size 1 small / 2 normal, six colour bytes), 0x19B 60 - THAC0
 with bonuses, 0x19C 60 - AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
 0x1A8 current HP, 0x1A9 movement.
@@ -124,6 +128,15 @@ Combat tiles: `DUNGCOM`, `WILDCOM` and `RANDCOM` hold 24x24 tiles as
 the 13x5 map squares around the party into a skewed 50x25 grid, which is
 the fake isometric view. The remake draws the same area straight from
 above (`remake/kroc/combat.py`).
+
+## Spells
+
+Spell numbers 1-94 follow the spell-name list in the executable (1 Bless,
+3 Cure Light Wounds, 15 Magic Missile, 21 Sleep, 23 Hold Person (cleric),
+34 Stinking Cloud, 47 Fireball, 51 Lightning Bolt, 55 Slow ...); a few
+names repeat for scroll and item versions. The full table, with each
+spell's shape, range and effect as the remake plays it, is
+`remake/kroc/spells.py`.
 
 ## Items
 
