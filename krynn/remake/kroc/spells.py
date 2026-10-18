@@ -110,6 +110,10 @@ def modify(name, rounds, **mods):
 
 def condition(cond, rounds, save=True, hd_limit=None, save_bonus=0):
     def eff(b, c, t, sp, lv):
+        from .specials import immune
+        if immune(t, cond):
+            b.log('%s is undead: %s has no hold on it.' % (t.name, sp.name))
+            return
         if hd_limit is not None and t.hd > hd_limit:
             b.log('%s is too powerful for %s.' % (t.name, sp.name))
             return
@@ -124,6 +128,18 @@ def condition(cond, rounds, save=True, hd_limit=None, save_bonus=0):
                                        'silenced': 'silenced', 'invisible': 'invisible',
                                        'missile_proof': 'protected from missiles',
                                        'globe': 'inside a globe of invulnerability'}.get(cond, cond)))
+    return eff
+
+
+def ailment(name):
+    """Blindness, disease: a save resists; on the party it lasts until cured."""
+    def eff(b, c, t, sp, lv):
+        if _save(b, t):
+            b.log('%s resists %s.' % (t.name, sp.name))
+            return
+        from .specials import ail
+        ail(t, name)
+        b.log('%s is %s!' % (t.name, name))
     return eff
 
 
@@ -160,6 +176,9 @@ def spiritual_hammer(b, c, t, sp, lv):
 
 
 def charm(b, c, t, sp, lv):
+    if getattr(t, 'undead', False):
+        b.log('%s is undead and cannot be charmed.' % t.name)
+        return
     if t.hd > 8 and sp.id in (10, 93):
         b.log('%s is too powerful to charm.' % t.name)
         return
@@ -256,9 +275,9 @@ TABLE = [
     S(35, 'Strength', MAGE, 2, 'ally', 1, effect=modify('Strength', 20, hit=1, dmg=1)),
     S(36, 'Animate Dead', CLERIC, 3, 'self', note='not used in combat'),
     S(37, 'Cure Blindness', CLERIC, 3, 'self', note='not used in combat'),
-    S(38, 'Cause Blindness', CLERIC, 3, 'enemy', 1, effect=modify('Blinded', 10, hit=-4, ac=-4)),
+    S(38, 'Cause Blindness', CLERIC, 3, 'enemy', 1, effect=ailment('blind')),
     S(39, 'Cure Disease', CLERIC, 3, 'self', note='not used in combat'),
-    S(40, 'Cause Disease', CLERIC, 3, 'enemy', 1, effect=modify('Diseased', 30, hit=-2, dmg=-1)),
+    S(40, 'Cause Disease', CLERIC, 3, 'enemy', 1, effect=ailment('diseased')),
     S(41, 'Dispel Magic', CLERIC, 3, 'area', 12, 1, dispel),
     S(42, 'Prayer', CLERIC, 3, 'party', effect=prayer),
     S(43, 'Remove Curse', CLERIC, 3, 'self', note='not used in combat'),
@@ -448,7 +467,10 @@ def cast(b, c, sp, target=None):
     if item is None:
         lv = caster_level(c, sp)
         c.spells.remove(sp.id)
-        b.log('%s casts %s.' % (c.name, sp.name))
+        if sp.id >= 200:                             # a dragon's breath (see specials.py)
+            b.log('%s breathes %s!' % (c.name, sp.name.split(' ', 1)[1].lower()))
+        else:
+            b.log('%s casts %s.' % (c.name, sp.name))
     else:
         lv = sp.cast_level or caster_level(c, sp.spell)
         b.log('%s uses %s.' % (c.name, sp.name))
@@ -532,7 +554,7 @@ def choose(b, c):
                         if h.helpless and sp.id in (21, 23, 34, 49, 86, 70):
                             continue
                         score += _worth(h) * (1 if h in foes else -2.5)
-                    if score >= 2.5:
+                    if score >= (1.5 if sp.id >= 200 else 2.5):      # dragons breathe freely
                         options.append((score, cell))
         for score, target in options:
             score *= 1.0 + sp.level * 0.2

@@ -136,6 +136,17 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   the pace when you run), Detect Traps (SPELL), and the companions who join
   you (ADD NPC: Kildirf, Strangbourn, Skyla, Mysellia, Sir Ringwald...),
   who fight under the computer's command and have morale.
+* **Monsters' powers, turning undead, lasting ailments**: the monsters'
+  special abilities come from `MONnSPC.DAX`: dragons breathe (fire, frost,
+  acid, lightning, gas; as much damage as the dragon has hit points, a save
+  halves it) and strike fear, draconians die as they should (baaz turn to
+  stone, bozaks' bones explode, kapaks dissolve in acid), ghouls, ghasts
+  and kapaks paralyse, ghasts sicken with their stench, giant snakes and
+  centipedes poison, and the undead shrug off sleep, charm and hold.
+  Clerics turn undead (N in combat; Majere's as two levels higher).
+  Poison, disease and blindness outlast the fight: no natural healing
+  while poisoned or diseased, until Neutralize Poison, Cure Disease, Cure
+  Blindness (in camp) or a temple cures them.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -160,12 +171,17 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
 
 ## What does not work yet
 
-The parts of the original engine that live in `game` rather than in the
-scripts are still to be rebuilt:
+Everything the game's scripts ask for now works, and the rules follow the
+manual. What is still open:
 
-* monsters' special abilities (`MONnSPC.DAX`: breath, poison...)
-* turning undead; poison, disease and blindness as lasting conditions
-
+* the original engine's own code has not been decoded for every rule, so
+  some figures follow the manual and AD&D instead (they are listed, with
+  where to change them, in [docs/CHANGES.md](docs/CHANGES.md#rule-choices))
+* a few monster affect codes are not used yet: the auraks' and Myrtani's
+  (0x04, 0x0D, 0x38: invisibility, blinking, death throes in the books),
+  Sir Lebaum's (0x47-0x4E), the spectral minion's (0x67), the kender's
+  (0x5B, 0x5C) and the elves' (0x5F)
+* the original's Alter (icons and game speed) and party order menus
 
 ## Play
 

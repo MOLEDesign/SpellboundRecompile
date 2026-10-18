@@ -703,6 +703,64 @@ def test_script_instructions(gf):
     assert 'no room' in w.add_npc(44, 100)
 
 
+def test_specials(gf):
+    """Dragon breath, draconian deaths, undead immunity and turning, venom, ailments."""
+    import random
+    from kroc import encounter, specials as SX, spells as SP, camp_magic as CM
+    from kroc.combat import Arena, Battle, Combatant, Attack, PARTY, DEAD
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    w.files.area = '1'
+    red = encounter.monster_combatant(w, 21, 0)
+    assert SX.BREATH in red.specials and 200 + sorted(SX.BREATHS).index(0x68) in red.spells
+    bozak = encounter.monster_combatant(w, 4, 0)
+    ghoul = encounter.monster_combatant(w, 7, 0)
+    assert SX.BONES in bozak.specials and ghoul.undead and SX.GHOUL in ghoul.specials
+    a = Arena(16, 9, 'F-DUNG')
+    hero = Combatant('HERO', PARTY, 30, 30, 5, 15, [Attack(2, 1, 8)], 12, ('party', None))
+    b = Battle(a, [hero], [bozak, ghoul], random.Random(3))
+    hero.x, hero.y, bozak.x, bozak.y, ghoul.x, ghoul.y = 4, 4, 5, 4, 9, 4
+    hp = hero.hp
+    b.damage(bozak, 999, 'the bozak falls.')
+    assert bozak.status == DEAD and any('bones explode' in ln for ln in b.log_lines)
+    assert hero.hp <= hp
+    # sleep and hold do not touch the undead
+    SP.spell(21).effect(b, hero, ghoul, SP.spell(21), 5)
+    assert not ghoul.has('asleep')
+    # a priest of Majere turns them
+    w.party[4].raw = w.party[4].raw[:0x5E] + bytes([2]) + w.party[4].raw[0x5F:]
+    cleric = encounter.party_combatant(w.party[4], w.files.item_types())
+    assert SX.turn_level(cleric) == 4                    # cleric 2, Majere +2
+    b2 = Battle(a, [cleric], [ghoul], random.Random(5))
+    cleric.x, cleric.y = 6, 4
+    for _ in range(20):
+        cleric.attacked = False
+        SX.turn_undead(b2, cleric)
+        if ghoul.has('fleeing') or ghoul.status == DEAD:
+            break
+    assert ghoul.has('fleeing') or ghoul.status == DEAD
+    # dragon breath: as much as the dragon's hit points, and the AI uses it
+    b3 = Battle(Arena(20, 12, 'F-DUNG'), [hero], [red], random.Random(1))
+    hero.x, hero.y, red.x, red.y = 4, 5, 9, 5
+    hero.hp = hero.hp_max = 200
+    pick = SP.choose(b3, red)
+    assert pick and pick[0].id >= 200, pick
+    SP.cast(b3, red, *pick)
+    assert hero.hp < 200
+    # ailments outlast the fight; the camp cures them
+    kal = w.party[4]
+    pc = encounter.party_combatant(kal, w.files.item_types())
+    SX.ail(pc, 'poisoned')
+    assert 'poisoned' in kal.ailments
+    assert any(e[0] == 'poisoned' for e in encounter.party_combatant(kal, w.files.item_types()).effects)
+    kal.hp = 5
+    w.night()
+    assert kal.hp == 5, 'no natural healing while poisoned'
+    kal.spells.append(59)
+    CM.cast(w, kal, 59, kal)
+    assert not kal.ailments
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

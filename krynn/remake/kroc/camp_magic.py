@@ -10,6 +10,7 @@ import pygame
 
 from .inventory import Panel, ROW, TEXT, HILITE, DIM, GOOD
 from .magic import heal_bonus_dice
+from .specials import CURES as AILMENT_CURES
 from .spells import SPELLS
 
 CURES = {3: (1, 8, 0), 57: (2, 8, 1), 63: (3, 8, 3)}
@@ -17,8 +18,8 @@ RAISE_DEAD = 67
 REMOVE_CURSE = {43, 81, 91}
 DETECT_MAGIC = {5, 11, 69, 90}
 READ_MAGIC = {18}
-CAMP = set(CURES) | {RAISE_DEAD} | REMOVE_CURSE | DETECT_MAGIC | READ_MAGIC
-ON_SOMEONE = set(CURES) | {RAISE_DEAD} | REMOVE_CURSE
+CAMP = set(CURES) | {RAISE_DEAD} | REMOVE_CURSE | DETECT_MAGIC | READ_MAGIC | set(AILMENT_CURES)
+ON_SOMEONE = set(CURES) | {RAISE_DEAD} | REMOVE_CURSE | set(AILMENT_CURES)
 SURVIVAL = {3: 40, 4: 45, 5: 50, 6: 55, 7: 60, 8: 65, 9: 70, 10: 75, 11: 80, 12: 85, 13: 90, 14: 92,
             15: 94, 16: 96, 17: 98, 18: 100}
 ELVES = (0, 1)          # Silvanesti and Qualinesti
@@ -65,6 +66,12 @@ def cast(world, caster, sid, target=None):
             target.dead, target.hp = False, 1
             target.stats['CON'] = max(3, con - 1)
             line = '%s raises %s from the dead!' % (caster.name, target.name)
+    elif sid in AILMENT_CURES:
+        what = AILMENT_CURES[sid]
+        if what not in getattr(target, 'ailments', set()):
+            return '%s is not %s.' % (target.name, what)
+        target.ailments = set(target.ailments) - {what}
+        line = '%s casts %s: %s is no longer %s.' % (caster.name, name, target.name, what)
     elif sid in REMOVE_CURSE:
         cursed = [i for i in target.items if i.cursed]
         if not cursed:

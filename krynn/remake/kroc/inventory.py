@@ -476,7 +476,8 @@ class TempleView(Panel):
     PER_HP = 5
 
     def price(self):
-        return sum(max(0, c.hp_max - max(c.hp, 0)) for c in self.party) * self.PER_HP
+        return sum(max(0, c.hp_max - max(c.hp, 0)) * self.PER_HP + 50 * len(getattr(c, 'ailments', ()))
+                   for c in self.party)
 
     def key(self, ev):
         if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) or ev.unicode.lower() == 'h':
@@ -500,6 +501,7 @@ class TempleView(Panel):
             return
         for c in self.party:
             c.hp = c.hp_max
+            c.ailments = set()                        # poison, disease and blindness too
         self.message = 'The priests heal the party for %d steel.' % cost
 
     def draw(self, screen):

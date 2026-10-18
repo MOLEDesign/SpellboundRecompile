@@ -5,7 +5,7 @@ from cok import blocks
 
 from cok import items as I
 
-from . import magic, magic_items
+from . import magic, magic_items, specials
 
 from .combat import (Attack, Battle, Combatant, ENEMY, PARTY, SPAN_X, SPAN_Y, SQUARE,
                      Missile, dungeon_arena, open_arena, DYING, DEAD)
@@ -80,6 +80,7 @@ def monster_combatant(world, mid, n, icon=None):
     c.levels = {'C': c.hd, 'M': c.hd}
     c.save_spell = rec[0xD4] or 16
     c.morale = morale(name, c.hd)
+    specials.arm(c, specials.read_specials(world, mid, area), name)
     its = world.files.monster_items(mid, area)
     c.missile = make_missile(its, world.files.item_types(), c.thac0)
     if c.missile is not None and c.missile.ammo is not None:
@@ -99,6 +100,7 @@ def party_combatant(ch, types=None, day=0, words=None):
         c.missile = make_missile(ch.items, types,
                                  ch.base_thac0 - I.dex_missile_bonus(ch.stats.get('DEX', 10)))
     c.spells = ch.spells               # the same list: spells cast stay used until a rest
+    c.effects = specials.ailment_effects(ch)            # poison, disease, blindness
     if types and words:
         c.item_powers = lambda: magic_items.powers(ch, words, types)
         c.slayer = magic_items.slayer(ch, words, types)

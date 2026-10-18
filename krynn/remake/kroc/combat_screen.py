@@ -8,6 +8,7 @@ Keys on your turn:
     RETURN or X                       attack the target (if next to you)
     F, or click a distant enemy       shoot the target (bow, sling, darts...)
     B                                 bandage a dying friend next to you
+    N                                 a cleric turns undead (they flee, or crumble)
     I                                 use a magic item (potion, wand, scroll, necklace),
                                       aimed like a spell
     M                                 cast a spell: pick it from the list (arrows + RETURN,
@@ -185,6 +186,18 @@ class CombatScreen:
             self.open_spells()
         elif ev.key == pygame.K_i:
             self.open_spells(items=True)
+        elif ev.key == pygame.K_n:
+            from . import specials
+            if not specials.turn_level(c):
+                self.b.log('%s cannot turn undead.' % c.name)
+            elif c.attacked:
+                self.b.log('%s has already acted.' % c.name)
+            else:
+                specials.turn_undead(self.b, c)
+                if self.b.check_end():
+                    self.finish()
+                    return
+                self.refresh()
         elif ev.key in DIRS:
             dx, dy = DIRS[ev.key]
             self.move_or_attack(dx, dy)
@@ -788,8 +801,8 @@ class CombatScreen:
         for ln in rows[-n:]:
             screen.blit(self.small.render(ln, True, TEXT), (r.x + 16, y))
             y += 34
-        help_ = ('arrows/QEZC move   bump/click: attack   F shoot   M magic   I item   T target   '
-                 'B bandage   SPACE end turn   U auto   L flee   V zoom')
+        help_ = ('arrows move  bump: attack  F shoot  M magic  I item  N turn undead  T target  '
+                 'B bandage  SPACE end  U auto  L flee  V zoom')
         screen.blit(self.small.render(help_, True, DIM), (self.VIEW.x, self.VIEW.bottom + 14))
 
     def draw_summary(self, screen):

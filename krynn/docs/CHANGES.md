@@ -94,6 +94,8 @@ to change.
 | The gods' special spells | One special slot, two from cleric level 5 (the manual gives no count) | `GOD_SPELLS`, `slots` in `magic.py` |
 | Knights' tithe | Not applied: with one shared purse it would empty the whole party's money | — |
 | New characters | Starting experience by the manual (second level; clerics and knights first); a starting kit by class (knights: plate, shield, long sword, as the manual says; kender: a hoopak); a starting grimoire by robe; 3d6 x 10 steel (x 2 for knights) | `remake/kroc/creation.py` |
+| Monsters' special abilities | From the affect codes in `MONnSPC.DAX`, with AD&D/Dragonlance effects: breath = the dragon's hit points (save for half), three a day; dragon fear on those of fewer hit dice; bozak bones 1d6 and kapak acid 1d6 to those adjacent; paralysis 2-6 rounds; venom 2d6 (snake) or 1d6 (centipede) and poisoned; stench -2 to hit | `remake/kroc/specials.py` |
+| Turning undead | d20 against 7 + 3 x (hit dice - cleric level), 2d6 hit dice of undead within 6 squares; 4 levels above destroys | `specials.turn_undead` |
 | A mage's new spell | Chosen from the spells open to the mage's order (manual p.54) | `training.WHITE`, `training.RED` |
 | Moons | Solinari 36 days, Lunitari 28, Nuitari 8, all full on day 1. Waxing: +1 spell. High sanction: +2 spells, +1 to saves, +1 level (level 6+, INT 15+). Low sanction: -1 save, -1 level. | `magic.MOONS`, `magic.PHASE_EFFECT` |
 | Spell effects | AD&D spell descriptions: ranges, areas, durations, saves | `TABLE` in `remake/kroc/spells.py` |
@@ -137,5 +139,7 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* monsters' special abilities (`MONnSPC.DAX`)
-* turning undead; lasting poison, disease and blindness
+* a few monster affect codes are not used yet: 0x04, 0x0D, 0x38 (auraks,
+  Myrtani), 0x47-0x4E (Sir Lebaum), 0x67 (spectral minion), 0x5B, 0x5C
+  (kender), 0x5F (elves)
+* the Alter menu (icons, game speed) and party order

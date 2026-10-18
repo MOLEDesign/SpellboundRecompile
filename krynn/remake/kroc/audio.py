@@ -13,7 +13,8 @@ import pygame
 from cok import sound as S
 
 # which of the game's sounds goes with what happens
-SPELL_SOUNDS = {47: 'fireb', 51: 'light', 15: 'whisl', 79: 'light', 83: 'gate'}
+SPELL_SOUNDS = {47: 'fireb', 51: 'light', 15: 'whisl', 79: 'light', 83: 'gate',
+                200: 'fireb', 201: 'fireb', 202: 'light', 203: 'gate', 204: 'fireb', 205: 'fireb'}
 
 
 class Audio:

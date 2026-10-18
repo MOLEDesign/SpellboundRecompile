@@ -193,6 +193,17 @@ cast3, cast4, swish, spell, dead0, dead1, dead, dead3, dead4, whisl, hit,
 light, pad, bigPad, fireb, arrow, turn, gate, krynn. `cok/sound.py` reads
 all of it and renders it to PCM.
 
+## Monster special abilities
+
+`MONnSPC.DAX`, by monster number: a chain of 9-byte affect records (code,
+duration u16, data, flag, link to the next). Codes seen: 0x18 breath
+weapon with 0x68 fire, 0x53 cold, 0x5A acid, 0x55 lightning, 0x54 gas,
+0x06 cold (silver); 0x49 dragon fear; 0x43 baaz turn to stone, 0x44 bozak
+bones explode, 0x45 paralysing touch, 0x46 kapak acid pool, 0x58 ghoul
+paralysis, 0x4F ghast stench, 0x60 undead, 0x40 / 0x41 snake and
+centipede venom. (Others, such as the kender's 0x5B/0x5C and the elves'
+0x5F, are not used by the remake.)
+
 ## Spells
 
 Spell numbers 1-94 follow the spell-name list in the executable (1 Bless,

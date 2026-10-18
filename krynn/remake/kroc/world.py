@@ -221,6 +221,7 @@ class Character:
                 'base_thac0': self.base_thac0, 'spell_picks': self.spell_picks,
                 'gone': getattr(self, 'gone', False), 'stats': self.stats,
                 'npc': getattr(self, 'npc', False), 'morale': getattr(self, 'morale', None),
+                'ailments': sorted(getattr(self, 'ailments', ())),
                 'gender': getattr(self, 'gender', 0),
                 'alignment': getattr(self, 'alignment', None), 'icon': {**self.icon, 'colours': self.icon['colours'].hex()},
                 'move': self.move,
@@ -245,6 +246,7 @@ class Character:
         c.gone = d.get('gone', False)
         c.alignment = d.get('alignment')
         c.npc, c.morale, c.gender = d.get('npc', False), d.get('morale'), d.get('gender', 0)
+        c.ailments = set(d.get('ailments', ()))
         if 'icon' in d:
             c.icon = dict(d['icon'], colours=bytes.fromhex(d['icon']['colours']))
         c.move = d.get('move', c.move)
@@ -578,8 +580,8 @@ class World:
         for c in self.party:
             if c.dead:
                 continue
-            if c.hp < c.hp_max:
-                c.hp = min(c.hp_max, max(c.hp, 0) + c.top_level)
+            if c.hp < c.hp_max and not getattr(c, 'ailments', set()) & {'poisoned', 'diseased'}:
+                c.hp = min(c.hp_max, max(c.hp, 0) + c.top_level)    # poison and disease stop it
             self.rememorise(c)
 
     def party_hurt(self):

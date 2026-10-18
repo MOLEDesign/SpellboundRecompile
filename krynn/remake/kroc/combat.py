@@ -373,6 +373,10 @@ class Battle:
             c.init = self.rng.randint(1, 6)
             self.tick_magic(c)
         self.check_morale()
+        from . import specials
+        if self.round == 1:
+            specials.at_start(self)                  # dragon fear
+        specials.each_round(self)
         self.order = sorted((c for c in self.all if c.active), key=lambda c: (c.init, c.side == ENEMY))
         self.log('-- Round %d --' % self.round)
 
@@ -645,6 +649,9 @@ class Battle:
             dmg = max(1, (roll(self.rng, atk.dice, atk.size, atk.bonus) + a.mod('dmg') + extra_dmg) * mult)
             self.sound('hit')
             self.damage(d, dmg, '%s %s %s for %d.' % (a.name, verb, d.name, dmg))
+            if melee:
+                from . import specials
+                specials.on_hit(self, a, d)          # paralysing touches, venom
             return True
         self.sound('miss')
         self.log(('%s misses %s.' if melee else '%s shoots at %s and misses.') % (a.name, d.name))
@@ -692,6 +699,9 @@ class Battle:
             if d.side == ENEMY or d.hp <= -10:
                 d.status = DEAD
                 self.sound('death', d.name)
+                if d.side == ENEMY:
+                    from . import specials
+                    specials.on_death(self, d)       # draconians' death throes
                 self.log('%s is killed.' % d.name)
             else:
                 d.status = DYING
@@ -795,7 +805,12 @@ class Battle:
     def ai_turn(self, c):
         """Generator of ('move', (x, y)) / ('attack', target) / ('shoot', target) /
         ('cast', (spell, target)) as the AI acts."""
-        from . import spells
+        from . import spells, specials
+        if specials.turn_level(c) and any(getattr(e, 'undead', False) and self.distance(c, e) <= 6
+                                         and e.hd <= specials.turn_level(c) + 1 for e in self.foes(c)):
+            yield ('turn', None)
+            specials.turn_undead(self, c)
+            return
         if c.has('fleeing'):
             yield from self.escape(c)
             if c.has('fleeing') or not c.active:
