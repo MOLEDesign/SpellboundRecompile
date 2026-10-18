@@ -33,6 +33,19 @@ def _s8(b):
     return b - 256 if b > 127 else b
 
 
+# the mindless and the bound never run (undead, golems, conjured things)
+FEARLESS = ('SKELET', 'SPECTR', 'ZOMBIE', 'GHOUL', 'GHAST', 'WIGHT', 'WRAITH', 'SPECTRE', 'GHOST',
+            'MUMMY', 'VAMPIRE', 'LICH', 'DEATH KNIGHT', 'SKULL', 'GOLEM', 'ELEMENTAL', 'UNDEAD',
+            'SHADOW', 'JUJU')
+
+
+def morale(name, hd):
+    """d100 score a monster must not exceed to keep fighting (None: never breaks)."""
+    if any(w in name.upper() for w in FEARLESS):
+        return None
+    return min(95, 40 + 6 * hd)
+
+
 def monster_combatant(world, mid, n, icon=None):
     """A monster from its MONnCHA record (offsets in docs/FORMATS.md)."""
     area = getattr(world.files, 'area', None)
@@ -64,6 +77,7 @@ def monster_combatant(world, mid, n, icon=None):
     c.hd = rec[0xD6] or 1
     c.levels = {'C': c.hd, 'M': c.hd}
     c.save_spell = rec[0xD4] or 16
+    c.morale = morale(name, c.hd)
     its = world.files.monster_items(mid, area)
     c.missile = make_missile(its, world.files.item_types(), c.thac0)
     if c.missile is not None and c.missile.ammo is not None:

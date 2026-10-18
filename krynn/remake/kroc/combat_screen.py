@@ -114,6 +114,9 @@ class CombatScreen:
         r = self.b.result
         if r == 'won':
             self.summary = ['VICTORY!', 'Each survivor gains %d experience.' % each]
+            ran = sum(1 for e in self.b.enemies if e.status == FLED)
+            if ran:
+                self.summary.insert(1, '%d of the enemy escaped.' % ran)
         elif r == 'fled':
             self.summary = ['The party escapes.']
         else:
@@ -539,6 +542,7 @@ class CombatScreen:
     MARKS = (('asleep', 'Zz', (150, 190, 255)), ('held', 'HELD', (255, 210, 90)),
              ('nauseated', 'SICK', (150, 220, 90)), ('charmed', 'CHARM', (255, 140, 220)),
              ('confused', '???', (255, 160, 60)), ('afraid', 'FEAR', (255, 255, 255)),
+             ('fleeing', 'FLEE', (255, 190, 190)),
              ('slowed', 'SLOW', (170, 170, 170)), ('hasted', 'FAST', (120, 255, 200)),
              ('silenced', 'MUTE', (200, 200, 200)), ('invisible', 'INVIS', (180, 220, 255)))
 

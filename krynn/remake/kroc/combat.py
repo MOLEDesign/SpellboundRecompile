@@ -29,7 +29,7 @@ import random
 from cok.geo import DX, DY
 
 PARTY, ENEMY = 'party', 'enemy'
-CONDITION_WORDS = {'asleep': 'asleep', 'held': 'held', 'nauseated': 'helpless with nausea',
+CONDITION_WORDS = {'fleeing': 'fleeing', 'asleep': 'asleep', 'held': 'held', 'nauseated': 'helpless with nausea',
                    'slowed': 'slowed', 'hasted': 'hasted', 'confused': 'confused',
                    'afraid': 'afraid', 'silenced': 'silenced', 'charmed': 'charmed',
                    'invisible': 'invisible'}
@@ -114,6 +114,9 @@ class Combatant:
         self.conditions = {}            # name -> rounds left: asleep, held, slowed ...
         self.images = 0                 # mirror images left
         self.cast_this_turn = False
+        # morale (monsters): d100 roll needed to keep fighting when things go badly
+        self.morale = None              # None: never breaks (the party, the mindless)
+        self.morale_checked = set()     # triggers already rolled for
 
     @property
     def active(self):
@@ -273,6 +276,7 @@ class Battle:
         self.log_lines = []
         self.logf = log
         self.result = None              # 'won', 'lost', 'fled'
+        self.start_count = {PARTY: len(party), ENEMY: len(enemies)}
 
     # --- bookkeeping ---------------------------------------------------------
     def log(self, text):
@@ -363,6 +367,7 @@ class Battle:
             c.aoo_used = False
             c.init = self.rng.randint(1, 6)
             self.tick_magic(c)
+        self.check_morale()
         self.order = sorted((c for c in self.all if c.active), key=lambda c: (c.init, c.side == ENEMY))
         self.log('-- Round %d --' % self.round)
 
@@ -482,6 +487,87 @@ class Battle:
                 self.log('%s gets a free attack.' % e.name)
                 self.attack(e, c, free=True)
         return True
+
+    # --- morale ---------------------------------------------------------------------
+    def check_morale(self):
+        """Monsters roll to keep fighting the first time each bad thing happens:
+        half their side down, or themselves below a third of their hit points.
+        A monster that runs gives no experience."""
+        side = self.enemies
+        start = self.start_count[ENEMY]
+        if start < 2:
+            return          # a lone monster (often the villain of the piece) fights to the end
+        lost = sum(1 for c in side if c.status in (DEAD, FLED))
+        broke = []
+        for c in side:
+            if c.morale is None or not c.active or c.has('fleeing') or hasattr(c, 'home'):
+                continue
+            triggers = []
+            if lost * 2 >= start:
+                triggers.append('half')
+            if c.hp * 3 < c.hp_max:
+                triggers.append('hurt')
+            for t in triggers:
+                if t in c.morale_checked:
+                    continue
+                c.morale_checked.add(t)
+                if self.rng.randint(1, 100) > c.morale:
+                    c.conditions['fleeing'] = 999
+                    broke.append(c)
+                    break
+        if len(broke) > 1:
+            self.log('%d %ss break and run!' % (len(broke), broke[0].name) if
+                     len({b.name for b in broke}) == 1 else 'The enemy breaks and runs!')
+        elif broke:
+            self.log('%s breaks and runs!' % broke[0].name)
+
+    def exit_distance(self, c):
+        """{cell: steps to the edge of the field} over open ground (creatures ignored)."""
+        a = self.arena
+        dist, q = {}, []
+        for y in range(a.h):
+            for x in range(a.w):
+                if a.edge(x, y) and a.passable(x, y):
+                    dist[(x, y)] = 0
+                    q.append((x, y))
+        i = 0
+        while i < len(q):
+            p = q[i]
+            i += 1
+            for dx, dy, _ in STEPS:
+                n = (p[0] + dx, p[1] + dy)
+                if n not in dist and a.inside(*n) and a.passable(*n):
+                    dist[n] = dist[p] + 1
+                    q.append(n)
+        return dist
+
+    def escape(self, c):
+        """A fleeing monster heads for the edge of the field and leaves it."""
+        dist = self.exit_distance(c)
+        far = 10 ** 6
+        here = min(dist.get(p, far) for p in c.cells())
+        if here >= far:
+            # nowhere to run: it fights on, cornered
+            c.conditions.pop('fleeing', None)
+            c.morale = None
+            self.log('%s is cornered and fights on!' % c.name)
+            return
+        r = self.reachable(c)
+        foes = self.foes(c)
+        cell = min(r, key=lambda p: (min(dist.get(q, far) for q in c.cells(*p)),
+                                     -min((self.distance_cells(c, p, f) for f in foes), default=0),
+                                     r[p][0]))
+        for p in self.path_to(c, cell) or []:
+            if not self.step(c, p[0] - c.x, p[1] - c.y):
+                break
+            yield ('move', p)
+            if not c.active:
+                return
+        if c.active and any(self.arena.edge(*p) for p in c.cells()):
+            c.status = FLED
+            self.log('%s escapes.' % c.name)
+            self.check_end()
+        c.attacked = True
 
     # --- charm ------------------------------------------------------------------------
     def charm(self, t, caster, rounds):
@@ -688,6 +774,10 @@ class Battle:
         """Generator of ('move', (x, y)) / ('attack', target) / ('shoot', target) /
         ('cast', (spell, target)) as the AI acts."""
         from . import spells
+        if c.has('fleeing'):
+            yield from self.escape(c)
+            if c.has('fleeing') or not c.active:
+                return
         if c.has('afraid'):
             yield from self.run_away(c)
             return

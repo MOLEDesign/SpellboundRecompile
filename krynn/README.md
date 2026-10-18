@@ -49,6 +49,12 @@ it in Python, so its worst flaws can be fixed.
   Image, Haste and Slow, Bless and Prayer bonuses, Confusion and Fear all
   work. Tags over each icon show who is asleep, held, charmed and so on.
   Cast spells stay used until the party rests.
+* **Morale**: monsters no longer fight to the last goblin. When half their
+  side is down, or one is badly hurt, each rolls against its morale (better
+  for tougher monsters) and may break and run for the edge of the field,
+  taking free attacks as it goes. Runaways give no experience. Undead and
+  other mindless things never run, a lone monster fights to the end, and a
+  monster with no way out turns and fights.
 * **The journal is in the game**: when the story says "you record it in
   journal entry 51" or "you hear tavern tale 12", that page of the manual
   opens on screen, maps and pictures included. Every entry the party finds
@@ -72,7 +78,7 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* morale and monster fleeing; spells outside combat (memorising, healing
+* spells outside combat (memorising, healing
   on the move, Detect Magic...)
 * items, treasure, shops, training, resting rules (an inn heals everyone
   fully and restores spells)

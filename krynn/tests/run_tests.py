@@ -267,6 +267,49 @@ def test_spells(gf):
     assert all(ch.spells == ch.memorised for ch in w.party if not ch.dead)
 
 
+def test_morale(gf):
+    """Beaten monsters run for the edge and give no experience; the mindless never run."""
+    import random
+    from kroc import encounter
+    from kroc.combat import Arena, Battle, Combatant, Attack, PARTY, ENEMY, DEAD, FLED
+    assert encounter.morale('SKELETAL KNIGHT', 5) is None and encounter.morale('GOBLIN', 1) == 46
+    a = Arena(12, 7, 'F-DUNG')
+    hero = Combatant('HERO', PARTY, 40, 40, 2, 10, [Attack(2, 1, 8)], 12, ('party', None))
+    gobs = [Combatant('GOBLIN', ENEMY, 6, 6, 6, 20, [Attack(2, 1, 6)], 6, ('monster', 9, '1'), xp=10)
+            for _ in range(4)]
+    b = Battle(a, [hero], gobs, random.Random(1))
+    hero.x, hero.y = 2, 3
+    for k, g in enumerate(gobs):
+        g.x, g.y, g.morale = 8, 1 + k, 0           # morale 0: always breaks
+    gobs[0].status = gobs[1].status = DEAD
+    b.start_round()
+    assert gobs[2].has('fleeing') and gobs[3].has('fleeing')
+    b.order = [gobs[2]]
+    c = b.next_turn()
+    list(b.ai_turn(c))
+    assert c.status == FLED, (c, c.status)
+    # a fleeing monster cornered in a closed room fights on
+    a2 = Arena(5, 5, 'F-DUNG')
+    for i in range(5):
+        a2.block[0][i] = a2.block[4][i] = a2.block[i][0] = a2.block[i][4] = 'W1-01-01'
+    hero2 = Combatant('HERO', PARTY, 40, 40, 2, 10, [Attack(2, 1, 8)], 12, ('party', None))
+    rat = Combatant('RAT', ENEMY, 3, 3, 8, 20, [Attack(2, 1, 3)], 12, ('monster', 8, '1'))
+    b2 = Battle(a2, [hero2], [rat], random.Random(2))
+    hero2.x, hero2.y, rat.x, rat.y = 1, 1, 3, 3
+    rat.conditions['fleeing'] = 999
+    b2.next_turn()
+    b2.turn = rat
+    rat.half_moves = 24
+    list(b2.ai_turn(rat))
+    assert not rat.has('fleeing') and rat.status != FLED
+    # whole fight: experience only for the dead
+    b.order = []
+    for g in gobs[3:]:
+        g.status = FLED
+    b.check_end()
+    assert b.result == 'won' and b.finish() == 20
+
+
 def main():
     try:
         gf = GameFiles(sys.argv[1] if len(sys.argv) > 1 else None)
