@@ -276,9 +276,14 @@ class Battle:
         self.log_lines = []
         self.logf = log
         self.result = None              # 'won', 'lost', 'fled'
+        self.sfx = None                 # sound callback (kind, what), set by the screen
         self.start_count = {PARTY: len(party), ENEMY: len(enemies)}
 
     # --- bookkeeping ---------------------------------------------------------
+    def sound(self, kind, what=None):
+        if self.sfx is not None:
+            self.sfx(kind, what)
+
     def log(self, text):
         self.log_lines.append(text)
         if self.logf:
@@ -635,8 +640,10 @@ class Battle:
                 self.log('%s strikes one of %s\'s images.' % (a.name, d.name))
                 return False
             dmg = max(1, (roll(self.rng, atk.dice, atk.size, atk.bonus) + a.mod('dmg') + extra_dmg) * mult)
+            self.sound('hit')
             self.damage(d, dmg, '%s %s %s for %d.' % (a.name, verb, d.name, dmg))
             return True
+        self.sound('miss')
         self.log(('%s misses %s.' if melee else '%s shoots at %s and misses.') % (a.name, d.name))
         return False
 
@@ -681,6 +688,7 @@ class Battle:
         if d.hp <= 0 and d.status == OK:
             if d.side == ENEMY or d.hp <= -10:
                 d.status = DEAD
+                self.sound('death', d.name)
                 self.log('%s is killed.' % d.name)
             else:
                 d.status = DYING
@@ -747,6 +755,7 @@ class Battle:
         a.half_moves = 0
         a.conditions.pop('invisible', None)
         long_range = self.distance(a, d) > m.range // 2
+        self.sound('shoot')
         shots = m.shots * (2 if a.has('hasted') else 1)
         if a.has('slowed'):
             shots = max(1, shots // 2)

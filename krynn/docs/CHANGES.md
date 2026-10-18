@@ -134,4 +134,6 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* sound and music
+* some script instructions are only logged (see the README)
+* monsters' special abilities (`MONnSPC.DAX`)
+* turning undead; lasting poison, disease and blindness

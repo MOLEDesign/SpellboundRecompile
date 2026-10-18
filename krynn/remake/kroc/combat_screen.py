@@ -54,6 +54,9 @@ class CombatScreen:
     def __init__(self, app, battle):
         self.app = app
         self.b = battle
+        audio = getattr(app, 'audio', None)
+        if audio is not None:
+            battle.sfx = audio.event
         self.font = app.font
         self.small = app.small
         self.tiny = getattr(app, "tiny", None) or pygame.font.Font(None, 24)

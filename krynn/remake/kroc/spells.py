@@ -457,6 +457,7 @@ def cast(b, c, sp, target=None):
             b.log(note)
     if sp.hostile:
         c.conditions.pop('invisible', None)
+    b.sound('cast', getattr(sp, 'spell', sp))
     if sp.shape == 'square':
         c.x, c.y = target
         b.log('%s steps through a door in space.' % c.name)

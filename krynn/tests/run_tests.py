@@ -635,6 +635,24 @@ def test_creation(gf):
     assert T.train(hero, rng), 'a new character trains like any other'
 
 
+def test_sound(gf):
+    """The instrument bank, every named sound, the pitch of a note, the title music."""
+    from cok import sound as S
+    bank = S.read_bank(gf.read('sound/sounddata'))
+    assert {'square', 'saw', 'tri', 'odd', 'odd2'} <= {k for k, v in bank.items() if isinstance(v, S.Sample)}
+    assert bank['in2'] == {'PTCH': 'slowtrem', 'VLUM': 'basicEnv', 'SAMP': 'tri'}
+    synth = S.Synth(bank, lambda n: gf.read('sound/' + n) if 'sound/' + n in gf else None)
+    for name in ('hit', 'swish', 'arrow', 'fireb', 'light', 'cast', 'spell', 'dead0', 'gate', 'turn'):
+        wave = synth.render(synth.find(name))
+        assert len(wave) > S.RATE // 50 and max(abs(v) for v in wave) > 0.1, name
+    a4 = synth.render(synth.find('in1'), 0.5, 69)[2000:2000 + S.RATE // 4]
+    assert abs(sum(1 for x, y in zip(a4, a4[1:]) if x <= 0 < y) * 4 - 440) <= 4, 'A4 is 440 Hz'
+    tempo, insts, tracks = S.read_smus(gf.read('sound/krynn'))
+    assert tempo == 120 and len(tracks) == 4 and insts[0] == 'in1'
+    pcm = S.render_music(gf.read('sound/krynn'), synth)
+    assert 80 < len(pcm) / 2 / S.RATE < 95, len(pcm) / 2 / S.RATE
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

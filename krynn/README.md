@@ -122,6 +122,13 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   new character starts at the manual's level with its class's kit. Unlike
   the original's single roll, abilities are 4d6 best three and can be
   rolled again as often as you like.
+* **Sound and music**: the game's own sounds, decoded from SOUND/ (IFF
+  8SVX samples, the SoundX instrument bank with its pitch and volume
+  envelopes, and the SMUS title music) and synthesised: blows and misses,
+  arrows, fireballs, lightning, spell casting, deaths (in five pitches),
+  a fanfare on levelling up, and the title music at the start. F8 turns
+  sound off and on; `--mute` starts silent. The extractor writes every
+  sound and the music as WAV files to `extracted/sound/`.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -149,7 +156,12 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
 The parts of the original engine that live in `game` rather than in the
 scripts are still to be rebuilt:
 
-* sound and music
+* some script instructions are only logged: DAMAGE (traps), ROB, FIND ITEM,
+  DESTROY ITEMS, ADD NPC, SURPRISE, PARTYSTRENGTH, CHECKPARTY, SPELL,
+  PROTECTION, FIND SPECIAL
+* monsters' special abilities (`MONnSPC.DAX`: breath, poison...)
+* turning undead; poison, disease and blindness as lasting conditions
+
 
 ## Play
 
@@ -173,6 +185,7 @@ python3 remake/krynn.py --new              # make a new party first
 | I | items: ready, give, drop, use (potions, scrolls to scribe) |
 | E | make camp: rest, rest until healed, fix (heal with spells), memorise spells, save |
 | F5 / F9 | save / load (ten slots, A to J) |
+| F8 | sound on/off |
 | F11 | full screen |
 | ESC | quit |
 
@@ -207,12 +220,13 @@ python3 tests/run_tests.py               # format and script checks against your
 ## Layout
 
 ```
-cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, items, blocks, gamefiles, png
+cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, items, sound, blocks, gamefiles, png
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
 remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal,
                 savegame, save_screen, magic (spell slots, moons), camp_screen, inventory,
-                training, hall_screen
+                training, hall_screen, magic_items, camp_magic, creation,
+                character_screens, audio
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

@@ -92,6 +92,8 @@ class HallView(Panel):
             return
         self.message = None
         ch.refresh(self.types, self.words)
+        if getattr(self.app, 'audio', None):
+            self.app.audio.event('level')
         self.lines = (self.lines + lines)[-6:]
         if ch.spell_picks:
             self.start_picking()

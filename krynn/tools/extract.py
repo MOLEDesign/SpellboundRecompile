@@ -14,6 +14,7 @@ installed files (default: looked up in krynn/original/). Writes:
     ecl/              ECL event scripts, disassembled
     lbm/              the IFF title screens and character icons
     blocks/           one reference picture per combat block id + index.md
+    sound/            every sound effect and the title music as WAV
     krynn.asm         annotated 68000 disassembly of "game" (needs capstone)
 """
 import argparse
@@ -30,6 +31,11 @@ from cok.gamefiles import GameFiles  # noqa: E402
 from cok.geo import GeoMap, corridor, load_walldef  # noqa: E402
 from cok.ilbm import ILBM  # noqa: E402
 from cok.png import write_png  # noqa: E402
+
+
+# the sounds the executable names (SOUND/ files and instruments of the bank)
+EFFECTS = ('cast', 'cast2', 'cast3', 'cast4', 'swish', 'spell', 'dead0', 'dead1', 'dead', 'dead3', 'dead4',
+           'whisl', 'hit', 'light', 'pad', 'bigPad', 'fireb', 'arrow', 'turn', 'gate')
 
 
 def write(path, data):
@@ -145,6 +151,17 @@ def main():
             p = im.palette + [(0, 0, 0)] * (256 - len(im.palette))
             write_png(os.path.join(out, 'lbm', name[:-4] + '.png'), im.width, im.height,
                       [p[c] for c in im.pixels])
+
+    # sound --------------------------------------------------------------------
+    if 'sound/sounddata' in gf:
+        from cok import sound as S
+        synth = S.Synth(S.read_bank(gf.read('sound/sounddata')),
+                        lambda n: gf.read('sound/' + n) if 'sound/' + n in gf else None)
+        for name in EFFECTS:
+            inst = synth.find(name)
+            if inst is not None:
+                write(os.path.join(out, 'sound', name + '.wav'), S.wav(S.to_pcm(synth.render(inst))))
+        write(os.path.join(out, 'sound', 'krynn.wav'), S.wav(S.render_music(gf.read('sound/krynn'), synth)))
 
     if not a.no_asm:
         import importlib.util

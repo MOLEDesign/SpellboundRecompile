@@ -17,6 +17,7 @@ from .hall_screen import HallView
 from .character_screens import SheetView, CreateView
 from .inventory import ItemsView, ShopView, TempleView, TreasureView
 from .world import SHOP_FLAG, TEMPLE_FLAG
+from .audio import Audio
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 # Everything is drawn on a 1920x1080 frame, then fitted to the window.
@@ -75,7 +76,7 @@ def surface_from(pic, frame=0, transparent=None):
 
 
 class App:
-    def __init__(self, source=None, size=None, fullscreen=False):
+    def __init__(self, source=None, size=None, fullscreen=False, muted=False):
         pygame.init()
         pygame.display.set_caption('Champions of Krynn - remake')
         self.fullscreen = fullscreen
@@ -91,6 +92,8 @@ class App:
         if source:
             from .world import Files
             self.world = World(files=Files(source), log=self.log)
+        self.audio = Audio(self.world.files, muted or os.environ.get('SDL_AUDIODRIVER') == 'dummy')
+        self.audio.play_music()
         self.renderer = view3d.Renderer()
         self.lines = []             # finished text lines
         self.para = ''              # text being accumulated
@@ -289,6 +292,9 @@ class App:
     def key(self, ev):
         if ev.key == pygame.K_F11:
             self.toggle_fullscreen()
+            return
+        if ev.key == pygame.K_F8:
+            self.notify('Sound off.' if self.audio.toggle() else 'Sound on.')
             return
         if self.combat is not None:
             self.combat.key(ev)

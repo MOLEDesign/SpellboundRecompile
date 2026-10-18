@@ -6,7 +6,7 @@
 
 Keys: arrows/WASD move and turn, L search, RETURN/SPACE choose,
 first letter picks a menu item, V character, I items, E camp, J journal,
-F5 save, F9 load, F11 full screen, ESC quit.
+F5 save, F9 load, F8 sound on/off, F11 full screen, ESC quit.
 """
 import argparse
 import os
@@ -24,10 +24,11 @@ def main():
     ap.add_argument('--fullscreen', action='store_true')
     ap.add_argument('--load', metavar='SLOT', help='start from saved game A-J')
     ap.add_argument('--new', action='store_true', help='make a new party instead of the save disk\'s')
+    ap.add_argument('--mute', action='store_true', help='no sound or music')
     a = ap.parse_args()
     from kroc.app import App
     size = tuple(int(v) for v in a.size.lower().split('x')) if a.size else None
-    app = App(a.source, size, a.fullscreen)
+    app = App(a.source, size, a.fullscreen, a.mute)
     if a.load:
         app.load_game(a.load.upper())
     elif a.new:

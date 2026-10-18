@@ -149,6 +149,28 @@ sets `7ED3` (chance in percent that a rest is interrupted) and `7ED2`
 (how often it is checked; 0 = never), and its `campint` entry is run when
 a rest is interrupted (usually an ambush from the block's monster table).
 
+## Sound
+
+`SOUND/` on disk 1 holds standard IFF: 8SVX samples (arrow, hit, swish,
+fireb, dead, cast2, pad, pad2, and the instrument samples cast3samp,
+lightsamp, tuningfork, whislsamp2), two INST instruments (cast3, cast4),
+the SMUS title music `krynn`, and `sounddata`, the bank of the game's
+sound driver (SoundX). The bank is NAME + FORM pairs written without IFF
+padding: five 8SVX waveforms of 7 octaves (square, saw, tri, odd, odd2),
+ENVL envelopes and INST instruments (`PTCH` pitch envelope, `VLUM` volume
+envelope, `SAMP` sample, by name). The music's instruments in1-in7 are in
+the bank.
+
+An envelope is (ticks, value) byte pairs at 50 ticks a second: a volume
+envelope moves to the value (0-64) over the ticks, a pitch envelope
+changes the Amiga period by the signed value; `ff 02 hi lo` sets the
+period, `ff 01` holds, `ff 00` ends (a volume envelope ending stops the
+sound), `fe n` loops back n pairs. A sample plays at 3546895 / period
+samples a second. The executable names the sounds it plays: cast, cast2,
+cast3, cast4, swish, spell, dead0, dead1, dead, dead3, dead4, whisl, hit,
+light, pad, bigPad, fireb, arrow, turn, gate, krynn. `cok/sound.py` reads
+all of it and renders it to PCM.
+
 ## Spells
 
 Spell numbers 1-94 follow the spell-name list in the executable (1 Bless,
