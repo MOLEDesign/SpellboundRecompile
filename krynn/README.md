@@ -129,6 +129,13 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   a fanfare on levelling up, and the title music at the start. F8 turns
   sound off and on; `--mute` starts silent. The extractor writes every
   sound and the music as WAV files to `extracted/sound/`.
+* **The story's companions and traps**: every script instruction the game
+  uses now works: traps and falling rocks (DAMAGE), thieves and tithes
+  (ROB), quest items (FIND ITEM, DESTROY ITEMS), skill checks on the party
+  (CHECKPARTY: thieves find traps and pick locks, the slowest member sets
+  the pace when you run), Detect Traps (SPELL), and the companions who join
+  you (ADD NPC: Kildirf, Strangbourn, Skyla, Mysellia, Sir Ringwald...),
+  who fight under the computer's command and have morale.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -156,9 +163,6 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
 The parts of the original engine that live in `game` rather than in the
 scripts are still to be rebuilt:
 
-* some script instructions are only logged: DAMAGE (traps), ROB, FIND ITEM,
-  DESTROY ITEMS, ADD NPC, SURPRISE, PARTYSTRENGTH, CHECKPARTY, SPELL,
-  PROTECTION, FIND SPECIAL
 * monsters' special abilities (`MONnSPC.DAX`: breath, poison...)
 * turning undead; poison, disease and blindness as lasting conditions
 

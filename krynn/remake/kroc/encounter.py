@@ -109,11 +109,14 @@ def party_combatant(ch, types=None, day=0, words=None):
     if c.levels['M']:
         c.levels['M'] = max(1, c.levels['M'] + level)
     c.save_spell = ch.save_spell - save
+    if getattr(ch, 'npc', False):
+        c.auto = True                                    # companions fight on their own
+        c.morale = getattr(ch, 'morale', 100)
     if ch.dead:
         c.status = DEAD
     elif ch.hp <= 0:
         c.status = DYING
-    c.auto = False
+    c.auto = getattr(ch, 'npc', False)
     return c
 
 

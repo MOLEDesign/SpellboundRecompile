@@ -137,10 +137,32 @@ above (`remake/kroc/combat.py`).
 
 ## Script variables for camping and the vault
 
-After `LOAD CHARACTER n`, `7C00`-`7DFF` show character n: the vault reads
-`7CC3` (steel carried) and `7D00` (non-zero when there is a character n);
-`LOAD CHARACTER 128 + n` writes it back. The vault balance is `4C33`, in
-hundreds of steel.
+After `LOAD CHARACTER n`, `7C00`-`7DFF` show character n, laid out as the
+game's in-memory character (not the file): `7C00` name, `7C10`-`7C1B`
+ability pairs, `7C61` knightly order, `7C72` race, `7C76` maximum HP,
+`7CA0`-`7CA7` thief level and skills (`7CA5` find traps, `7CA6` open
+locks, `7CA7` remove traps), `7CC3` steel carried, `7CC6`-`7CCD` class
+levels in record order (`7CCD` knight), `7CD6` gender, `7D00` status (1 =
+able to act; the scripts set it to 1 to restore someone), `7D19` current
+HP, `7D1B` movement. `LOAD CHARACTER 128 + n` writes it back. The vault
+balance is `4C33`, in hundreds of steel.
+
+Instructions on the party: `DAMAGE flags, dice, size, bonus, x` (flags
+bit 7: dice of damage to the loaded character, with bit 6 to everyone, a
+saving throw halving it unless x is 128; without bit 7, `flags` missiles
+at random members hitting as THAC0 60 - x); `ROB who, percent, -` (1 the
+party, 0 the loaded character; Crown knights tithe 10%, Sword and Rose
+keep 20 steel); `FIND ITEM type` (sets = when someone carries one);
+`DESTROY ITEMS type`; `SPELL id, who, found` (who has it memorised, 255 =
+no one); `CHECKPARTY field, value, least, most, best, count` (over the
+party, `field` a window address); `ADD NPC monster, morale` (two
+operands); `CALL [2E10]` redraws the view after a script moved the party,
+`[6803]` is a step of a monster's approach, `[B203]`/`[C01E]` flash the
+screen.
+
+The monster record is the character layout one byte lower from 0x59 (race
+0x5A, class 0x5B, order 0x5C...) with class levels at 0xF9-0x100: that is
+how a companion who joins is turned into a party member.
 
 `C04F` is the flags byte of the party's map square (the third GEO plane);
 the low six bits number the rooms and areas of the map, and scripts test

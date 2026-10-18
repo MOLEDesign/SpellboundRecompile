@@ -498,10 +498,13 @@ class Battle:
         """Monsters roll to keep fighting the first time each bad thing happens:
         half their side down, or themselves below a third of their hit points.
         A monster that runs gives no experience."""
-        side = self.enemies
-        start = self.start_count[ENEMY]
-        if start < 2:
-            return          # a lone monster (often the villain of the piece) fights to the end
+        for side, start in ((self.enemies, self.start_count[ENEMY]), (self.party, self.start_count[PARTY])):
+            # a lone monster (often the villain of the piece) fights to the end;
+            # on the party's side only the companions (NPCs) have a morale
+            if start >= 2:
+                self._side_morale(side, start)
+
+    def _side_morale(self, side, start):
         lost = sum(1 for c in side if c.status in (DEAD, FLED))
         broke = []
         for c in side:

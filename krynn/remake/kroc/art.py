@@ -141,6 +141,8 @@ class Art:
     def party_icon(self, ch):
         key = ('party', id(ch))
         if key not in self.cache:
+            if 'monster' in ch.icon:                       # a companion: their own icon
+                return self.monster_icon(ch.icon['monster'], False, ch.icon.get('area'))
             self.cache[key] = self._compose(ch.icon)
         return self.cache[key]
 

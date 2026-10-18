@@ -425,12 +425,51 @@ class VM:
     def op_41(self, i):                       # ADD EP
         self.game.add_experience(self.value(i.args[0]), self.value(i.args[1]))
 
-    def op_2E(self, i):                       # DAMAGE
-        yield ('note', 'damage %s' % [self.value(a) for a in i.args])
+    def op_2E(self, i):                       # DAMAGE flags, dice, size, bonus, to-hit
+        lines = self.game.damage_party(*[self.value(a) for a in i.args])
+        for line in lines:
+            yield ('print', line + '\n', False)
+
+    def op_28(self, i):                       # ROB who, percent, (unused)
+        self.game.rob(self.value(i.args[0]), self.value(i.args[1]))
+
+    def op_32(self, i):                       # FIND ITEM type: '=' when the party has one
+        found = self.game.find_item(self.value(i.args[0]))
+        self.flags = [found, not found, False, False, found, not found]
+
+    def op_40(self, i):                       # DESTROY ITEMS type
+        self.game.destroy_items(self.value(i.args[0]))
+
+    def op_3B(self, i):                       # SPELL id -> who has it memorised (255: no one)
+        who = self.game.who_has_spell(self.value(i.args[0]))
+        self.set(i.args[1].value, who)
+        self.set(i.args[2].value, 0 if who == 255 else 1)
+
+    def op_1E(self, i):                       # CHECKPARTY field, value -> min, max, best, count
+        field = i.args[0].value - 0x7C00
+        lo, hi, best, count = self.game.check_party(field, self.value(i.args[1]))
+        for a, v in zip(i.args[2:], (lo, hi, best, count)):
+            self.set(a.value, v)
+
+    def op_36(self, i):                       # ADD NPC monster, morale
+        line = self.game.add_npc(self.value(i.args[0]), self.value(i.args[1]))
+        if line:
+            yield ('print', line + '\n', False)
+
+    def op_2D(self, i):                       # CALL an engine routine (screen effects)
+        target = i.args[0].value
+        if target == 0x2E10:
+            yield ('redraw',)                 # after the script moved the party
+        elif target == 0x6803:
+            yield ('pause', 0.08)             # a step of a monster's approach
+        elif target in (0xB203, 0xC01E):
+            yield ('flash',)
+
+    def op_3E(self, i):                       # DUMP: drop what the script loaded
+        pass
 
     def _note(self, i):
         yield ('note', '%s %s' % (i.name, [self.value(a) if a.code < 0x80 else a.text for a in i.args]))
 
-    # recorded but not simulated yet
-    op_1D = op_1E = op_1F = op_22 = op_23 = op_28 = op_2D = op_32 = op_36 = \
-        op_3B = op_3C = op_3E = op_3F = op_40 = _note
+    # never used by Champions of Krynn's scripts
+    op_1D = op_1F = op_22 = op_23 = op_3C = op_3F = _note

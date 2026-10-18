@@ -38,7 +38,7 @@ OPCODES = {
     0x2A: ('GETTABLE', 3), 0x2B: ('HORIZONTAL MENU', None), 0x2C: ('PARLAY', 6),
     0x2D: ('CALL', 1), 0x2E: ('DAMAGE', 5), 0x2F: ('AND', 3), 0x30: ('OR', 3),
     0x31: ('SPRITE OFF', 0), 0x32: ('FIND ITEM', 1), 0x33: ('PRINT RETURN', 0),
-    0x34: ('ECL CLOCK', 1), 0x35: ('SAVE TABLE', 3), 0x36: ('ADD NPC', 1),
+    0x34: ('ECL CLOCK', 1), 0x35: ('SAVE TABLE', 3), 0x36: ('ADD NPC', 2),
     0x37: ('LOAD PIECES', 3), 0x38: ('PROGRAM', 1), 0x39: ('WHO', 1),
     0x3A: ('DELAY', 0), 0x3B: ('SPELL', 3), 0x3C: ('PROTECTION', 1),
     0x3D: ('CLEAR BOX', 0), 0x3E: ('DUMP', 0), 0x3F: ('FIND SPECIAL', 1),

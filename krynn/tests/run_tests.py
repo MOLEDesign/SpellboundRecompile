@@ -538,7 +538,6 @@ def test_camp_magic(gf):
 
 def test_gods_and_orders(gf):
     """The gods' special spells and powers; knights petitioning the next order."""
-    import random
     from kroc import magic, training as T, encounter
     from kroc.world import World, Files
     w = World(files=Files(gf.source))
@@ -651,6 +650,57 @@ def test_sound(gf):
     assert tempo == 120 and len(tracks) == 4 and insts[0] == 'in1'
     pcm = S.render_music(gf.read('sound/krynn'), synth)
     assert 80 < len(pcm) / 2 / S.RATE < 95, len(pcm) / 2 / S.RATE
+
+
+def test_script_instructions(gf):
+    """DAMAGE, ROB, FIND/DESTROY ITEMS, SPELL, CHECKPARTY, ADD NPC and the window."""
+    import random
+    from cok.ecl import OPCODES
+    from kroc.world import World, Files
+    from kroc import encounter
+    assert OPCODES[0x36] == ('ADD NPC', 2), 'ADD NPC takes the companion and its morale'
+    w = World(files=Files(gf.source))
+    w.files.area = '1'
+    w.vm.rng = random.Random(1)
+    knight = w.party[0]
+    # the character window
+    w.select_character(0)
+    assert w.vm.get(0x7CCD) == 1 and w.vm.get(0x7D19) == knight.hp and w.vm.get(0x7C61) == 1
+    w.vm.set(0x7D19, 3)
+    assert knight.hp == 3
+    w.select_character(3)                                 # Molly: a thief
+    assert w.vm.get(0x7CCC) == 2 and w.vm.get(0x7CA6) > 0 and w.vm.get(0x7D00) == 1
+    # DAMAGE: everyone (save for half), one character, a volley of arrows
+    hp = [c.hp for c in w.party]
+    w.damage_party(0xC0, 1, 10, 0, 0)
+    assert all(c.hp < h for c, h in zip(w.party, hp))
+    w.select_character(1)
+    w.damage_party(0x80, 1, 1, 254, 128)
+    assert w.party[1].dead
+    lines = w.damage_party(4, 1, 6, 0, 44)
+    assert len(lines) >= 4
+    # ROB: a knight's tithe costs the shared purse nothing; a thief takes a share
+    w.purse['steel'] = 600
+    w.select_character(0)
+    w.rob(0, 100)
+    assert w.purse['steel'] == 600
+    w.rob(1, 50)
+    assert w.purse['steel'] == 300
+    # items and spells
+    assert w.find_item(18) and not w.find_item(63)
+    w.destroy_items(18)
+    assert not w.find_item(18)
+    assert w.who_has_spell(21) == 2 and w.who_has_spell(47) == 255
+    lo, hi, best, count = w.check_party(0x11B, 12)
+    assert lo <= hi and count >= 0
+    # ADD NPC: Strangbourn the knight joins, fights on his own, at most two companions
+    line = w.add_npc(34, 100)
+    sb = w.party[-1]
+    assert 'STRANGBOURN' in line and sb.npc and sb.levels['knight'] == 4 and sb.raw[0x5D] == 1
+    c = encounter.party_combatant(sb, w.files.item_types())
+    assert c.auto and c.morale == 100
+    w.add_npc(54, 80)
+    assert 'no room' in w.add_npc(44, 100)
 
 
 def json_roundtrip(d):

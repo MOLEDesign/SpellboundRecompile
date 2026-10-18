@@ -126,6 +126,18 @@ def _s8(b):
     return b - 256 if b > 127 else b
 
 
+def thief_skills(ch):
+    """(thief level, pick pockets, move silently, hide, hear noise, find traps,
+    open locks, remove traps) in percent, from the AD&D tables."""
+    lv = ch.levels.get('thief', 0)
+    if not lv:
+        return (0,) * 8
+    dex = ch.stats.get('DEX', 10)
+    adj = {16: 5, 17: 10, 18: 15, 19: 20}.get(dex, 0)
+    up = lambda base, step: min(99, base + step * (lv - 1) + adj)
+    return (lv, up(30, 5), up(15, 6), up(10, 5), 10 + 5 * (lv // 3), up(20, 5), up(25, 4), up(20, 5))
+
+
 class Character:
     """A party member, from a CHRDATAn.SAV record (426 bytes).
 
@@ -208,6 +220,8 @@ class Character:
                 'book': self.book, 'levels': self.levels, 'hp_max': self.hp_max,
                 'base_thac0': self.base_thac0, 'spell_picks': self.spell_picks,
                 'gone': getattr(self, 'gone', False), 'stats': self.stats,
+                'npc': getattr(self, 'npc', False), 'morale': getattr(self, 'morale', None),
+                'gender': getattr(self, 'gender', 0),
                 'alignment': getattr(self, 'alignment', None), 'icon': {**self.icon, 'colours': self.icon['colours'].hex()},
                 'move': self.move,
                 'items': [i.to_list() for i in self.items],
@@ -230,6 +244,7 @@ class Character:
         c.spell_picks = d.get('spell_picks', 0)
         c.gone = d.get('gone', False)
         c.alignment = d.get('alignment')
+        c.npc, c.morale, c.gender = d.get('npc', False), d.get('morale'), d.get('gender', 0)
         if 'icon' in d:
             c.icon = dict(d['icon'], colours=bytes.fromhex(d['icon']['colours']))
         c.move = d.get('move', c.move)
@@ -315,32 +330,161 @@ class World:
             self.selected = n
 
     # The scripts read and write the character LOAD CHARACTER picked through
-    # 7C00-7DFF. The vault uses 7CC3 (steel carried) and 7D00 (character there?).
-    # The party shares one purse, which the first character holds for them.
-    STEEL, PRESENT = 0xC3, 0x100
+    # 7C00-7DFF, the game's in-memory character (not the file's layout):
+    #   10-1B ability pairs, 61 knightly order, 72 race, 76 maximum HP,
+    #   A0-A7 thief level and skills (A5 find traps, A6 open locks, A7 remove
+    #   traps), C3 steel carried, C6-CD class levels (record order), D6 gender,
+    #   100 status (1 = able), 119 current HP, 11B movement.
+    # The party shares one purse, held for them by the first character who is
+    # not a knight (so the knights' tithes, which the scripts take, cost nothing).
+    STEEL, PRESENT, HP, MOVE = 0xC3, 0x100, 0x119, 0x11B
 
     def _loaded(self):
         n = getattr(self, 'loaded', self.selected)
         return self.party[n] if 0 <= n < len(self.party) else None
 
+    def purse_holder(self):
+        return next((c for c in self.party if not c.levels.get('knight')), None)
+
     def character_value(self, offset):
         ch = self._loaded()
         if offset == self.PRESENT:
-            return 1 if ch is not None and not ch.dead else 0
+            return 1 if ch is not None and not ch.dead and ch.hp > 0 else 0
+        if ch is None:
+            return 0 if offset >= 0x10 else None
         if offset == self.STEEL:
-            return self.purse['steel'] if ch is not None and ch is self.party[0] else 0
+            return self.purse['steel'] if ch is self.purse_holder() else 0
         if offset == self.STEEL + 1:
             return 0
+        if 0x10 <= offset < 0x1C:
+            return ch.stats.get(('STR', 'INT', 'WIS', 'DEX', 'CON', 'CHA')[(offset - 0x10) // 2], 0)
+        if offset == 0x61:
+            return ch.raw[0x5D] if len(ch.raw) > 0x5D else 0
+        if offset == 0x72:
+            return ch.raw[0x5B] if len(ch.raw) > 0x5B else 6
+        if offset == 0x76:
+            return ch.hp_max
+        if 0xA0 <= offset <= 0xA7:
+            return thief_skills(ch)[offset - 0xA0]
+        if 0xC6 <= offset <= 0xCD:
+            return ch.levels.get(ch.CLASSES[offset - 0xC6], 0)
+        if offset == 0xD6:
+            return getattr(ch, 'gender', 0)
+        if offset == self.HP:
+            return max(0, ch.hp)
+        if offset == self.MOVE:
+            return ch.move
         return None
 
     def set_character_value(self, offset, value):
         """True when the write landed on game state (else VM memory keeps it)."""
         ch = self._loaded()
         if offset == self.STEEL:
-            if ch is not None and ch is self.party[0]:
+            if ch is not None and ch is self.purse_holder():
                 self.purse['steel'] = value
             return True
-        return offset == self.PRESENT
+        if ch is None:
+            return offset == self.PRESENT
+        if offset == self.PRESENT:
+            if value == 1 and ch.dead and not getattr(ch, 'gone', False):
+                ch.dead = False                   # the scripts' healers bring people back
+                ch.hp = max(ch.hp, 1)
+            return True
+        if offset == self.HP:
+            ch.hp = min(ch.hp_max, value)
+            return True
+        return False
+
+    # --- script instructions on the party -------------------------------------------
+    def damage_party(self, flags, dice, size, bonus, to_hit):
+        """DAMAGE: flags & 0x80: dice of damage to the loaded character, or with
+        0x40 to everyone (a save halves it unless the last operand is 128);
+        otherwise `flags` missiles at random members, hitting as THAC0 60 - to_hit."""
+        from .combat import roll
+        rng = self.vm.rng
+        alive = [c for c in self.party if not c.dead]
+        lines = []
+
+        def hurt(c, n):
+            c.hp -= n
+            if c.hp <= -10 or (c.hp <= 0 and n > 100):
+                c.dead = True
+                lines.append('%s is killed.' % c.name)
+            elif c.hp <= 0:
+                lines.append('%s falls unconscious.' % c.name)
+            else:
+                lines.append('%s takes %d damage.' % (c.name, n))
+
+        if flags & 0x80:
+            who = alive if flags & 0x40 else [c for c in [self._loaded()] if c is not None and not c.dead]
+            for c in who:
+                n = max(0, roll(rng, dice, size, bonus))
+                if to_hit != 128 and rng.randint(1, 20) >= c.save_spell:
+                    n //= 2
+                hurt(c, n)
+        else:
+            thac0 = 60 - to_hit if to_hit else 20
+            for _ in range(flags):
+                if not alive:
+                    break
+                c = rng.choice(alive)
+                if rng.randint(1, 20) >= thac0 - c.ac:
+                    hurt(c, max(1, roll(rng, dice, size, bonus)))
+                else:
+                    lines.append('%s is missed.' % c.name)
+        return lines
+
+    def rob(self, who, percent):
+        """ROB: 1 the whole party, 0 the loaded character (their share of the purse)."""
+        ch = self._loaded()
+        if who == 0 and (ch is None or ch.levels.get('knight')):
+            return                                # knights' tithes: see purse_holder
+        share = 1.0 if who else 1.0 / max(1, len([c for c in self.party if not c.dead]))
+        for coin in COINS:
+            self.purse[coin] -= int(self.purse[coin] * share * percent / 100)
+
+    def find_item(self, type_):
+        return any(i.type == type_ for c in self.party for i in c.items)
+
+    def destroy_items(self, type_):
+        for c in self.party:
+            c.items = [i for i in c.items if i.type != type_]
+        self.refresh_party()
+
+    def who_has_spell(self, sid):
+        for n, c in enumerate(self.party):
+            if not c.dead and sid in c.spells:
+                return n
+        return 255
+
+    def check_party(self, field, value):
+        """CHECKPARTY: (least, most, who has the most, how many reach value) of a field."""
+        keep = getattr(self, 'loaded', self.selected)
+        vals = []
+        for n, c in enumerate(self.party):
+            if c.dead:
+                continue
+            self.loaded = n
+            v = self.character_value(field)
+            vals.append((v or 0, n))
+        self.loaded = keep
+        if not vals:
+            return 0, 0, 255, 0
+        best = max(vals)
+        return min(vals)[0], best[0], best[1], sum(1 for v, _ in vals if v >= value)
+
+    def add_npc(self, mid, morale):
+        """ADD NPC: a character of the story joins (two at most, as in the original)."""
+        from .npc import npc_character
+        if sum(1 for c in self.party if getattr(c, 'npc', False)) >= 2:
+            return 'There is no room in the party for another companion.'
+        ch = npc_character(self, mid, morale)
+        if ch is None:
+            return None
+        if any(c.name == ch.name for c in self.party):
+            return None
+        self.party.append(ch)
+        return '%s joins the party.' % ch.name
 
     def add_experience(self, who, amount):
         for c in self.party:

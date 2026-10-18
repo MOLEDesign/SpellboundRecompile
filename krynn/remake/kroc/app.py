@@ -107,6 +107,7 @@ class App:
         self.journal_button = pygame.Rect(0, 0, 0, 0)
         self.overlay_next = None    # a screen to open when the current one closes
         self.typing = None          # {'kind': 'number'/'string', 'text'} while a script asks
+        self.flash_until = 0        # a script's flash of light
         self.seen_refs = set()      # references already shown from the current text
         self.wait_until = 0
         self.visited = set()
@@ -259,8 +260,14 @@ class App:
                 self.sprite = None
             elif k == 'redraw':
                 pass
+            elif k == 'pause':
+                self.wait_until = time.time() + req[1]
+            elif k == 'flash':
+                self.flash_until = time.time() + 0.15
         if self.world.in_dungeon and self.world.geo:
             self.visited.add((self.world.geo_id, self.world.x, self.world.y))
+        if self.world.party and all(c.dead for c in self.world.party) and not self.combat:
+            self.party_perished()                     # a trap or a fall finished them
 
     def check_journal(self):
         """Open the page of any journal entry / tavern tale the text just mentioned."""
@@ -409,17 +416,20 @@ class App:
             result = self.combat.b.result
             self.combat = None
             if result == 'lost':
-                # the party is dead: back to the start, as the original does
-                self.world = World(files=self.world.files, log=self.log)
-                self.lines, self.para, self.picture, self.sprite = [], '', None, None
-                self.add_text('The party has perished. A new band gathers at the Inn... '
-                              '(F9 loads a saved game.)', True)
-                self.flush()
-                self.gen = self.world.start()
-                self.answer = None
+                self.party_perished()
             else:
                 self.answer = result == 'won'
             self.pump()
+
+    def party_perished(self):
+        """The party is dead: back to the start, as the original does."""
+        self.world = World(files=self.world.files, log=self.log)
+        self.lines, self.para, self.picture, self.sprite = [], '', None, None
+        self.add_text('The party has perished. A new band gathers at the Inn... '
+                      '(F9 loads a saved game.)', True)
+        self.flush()
+        self.gen = self.world.start()
+        self.answer = None
 
     def open_journal(self):
         last = self.world.journal_found[-1] if self.world.journal_found else None
@@ -459,6 +469,8 @@ class App:
             self.present()
             return
         self.draw_game()
+        if time.time() < self.flash_until:
+            self.screen.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
         self.present()
 
     def draw_game(self):

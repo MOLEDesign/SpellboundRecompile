@@ -122,6 +122,9 @@ in play.
 | Shops and temples opened an empty fight | The scripts open them through `COMBAT` with a flag set (`7F6C` shop, `7EE2` temple); the remake opens the armoury or temple instead. |
 | Scripts that asked for a number or a name (the vault's "how many will you deposit?") got 0 | INPUT NUMBER and INPUT STRING open a typed prompt. |
 | The character window (`7C00`-`7DFF`) always read 0, so the vault saw no money and no characters | LOAD CHARACTER selects who the window shows; `7CC3` is the steel carried (the shared purse, held by the first character) and `7D00` says whether a character is there. |
+| ADD NPC was read with one operand instead of two (the companion and its morale), so the morale byte read as EXIT and the scripts stopped where a companion should join | Two operands; the companions join. |
+| DAMAGE, ROB, FIND ITEM, DESTROY ITEMS, CHECKPARTY, SPELL and ADD NPC were only logged: traps did no harm, quest items were never checked | All carried out (see FORMATS.md). |
+| A trap that killed the whole party left the game running | The party perishes as after a lost fight. |
 | Saved items read a plus of +104 | That byte is leftover memory; the real plus is two bytes later (the SWG records are word-aligned). |
 | Area spells were blocked by creatures standing in the way | Only walls block a spell's line of sight. |
 | A creature asleep or held could still make free attacks and stop archers shooting | Only creatures able to act count as a threat. |
@@ -134,6 +137,5 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* some script instructions are only logged (see the README)
 * monsters' special abilities (`MONnSPC.DAX`)
 * turning undead; lasting poison, disease and blindness
