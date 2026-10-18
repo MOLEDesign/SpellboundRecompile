@@ -113,7 +113,7 @@ not spells), 0x5A 60 - base THAC0, 0x5B race, 0x5C class, 0x64 maximum HP,
 0x5E deity (clerics), 0x5F mage order (1 White Robes, 2 Red, 3 Black,
 0 none), 0x66-0xC3 spellbook: one byte per spell number at 0x65 + id (the
 mage's grimoire, the cleric's prayers), 0xFE-0x105 levels (cleric, druid,
-fighter, paladin, ranger, magic-user, thief, knight), 0x141-0x14B combat icon (head,
+fighter, paladin, ranger, magic-user, thief, knight), 0x11E experience (u32), 0x141-0x14B combat icon (head,
 body, slot, size 1 small / 2 normal, six colour bytes), 0x19B 60 - THAC0
 with bonuses, 0x19C 60 - AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
 0x1A8 current HP, 0x1A9 movement.
@@ -169,11 +169,39 @@ Weapon types 1-30 follow the order of the item-name word list in the
 executable (1 Battle Axe ... 18 Long Sword, 25 Short Bow, 27 Light
 Crossbow, 28 Sling, 30 Arrow). 67 is the kender hoopak.
 
-Item records are 63 bytes in `ITEMn.DAX` and `MONnITM.DAX` (type at 0x2E;
-monster item names are uninitialised) and 72 bytes in a saved character's
-`.SWG` (name as a C string, type at 0x30, readied flag at 0x3A, quantity
-at 0x40). The third operand of the ECL `LOAD MONSTER` instruction is the
-combat icon (`CPICn.DAA` id).
+Byte 6 is the armour value: `(b & 0x7F) - 0x32` for body armour (leather
+2, ring 3, scale 4, chain 5, banded 6, plate 7, Solamnic plate 10) and
+`b & 0x7F` for what is worn over it (shield 1). AC = 10 - armour - plus -
+dexterity bonus reproduces every saved character's AC.
+
+Item records are 63 bytes in `ITEMn.DAX` and `MONnITM.DAX` (little-endian)
+and 72 bytes in a saved character's `.SWG` (big-endian, word-aligned):
+
+| DAX | SWG | field |
+|-----|-----|-------|
+| 0x00 | 0x00 | name (length byte + text / C string; monster item names are junk) |
+| 0x2E | 0x30 | type (index into the type table) |
+| 0x2F-0x31 | 0x32-0x34 | three name words; the name reads word 3, 2, 1 |
+| 0x32 | 0x37 | magical plus (charges for wands and necklaces) |
+| 0x34 | 0x3A | readied |
+| 0x35 | 0x3B | name words hidden until identified (bit 2: word 1, bit 1: word 2) |
+| 0x36 | 0x3D | cursed |
+| 0x37 | 0x3E | weight (u16) |
+| 0x39 | 0x40 | count (arrows, darts) |
+| 0x3A | 0x42 | value in steel (u16) |
+| 0x3C-0x3E | 0x44-0x46 | effects: a scroll's spell numbers, charges... |
+
+Name words are the item word list in the executable (1 Battle Axe ... 90
+"of" ... 111 "+1"): 3c 4d 5a 08 is type 60, words Disruption / of / Mace,
+"Mace of Disruption". The third operand of the ECL `LOAD MONSTER`
+instruction is the combat icon (`CPICn.DAA` id).
+
+`TREASURE` has eight operands: silver, copper, bronze, platinum, steel,
+gems, jewelry, and an `ITEMn.DAX` block (255 none, 128 + n: n random
+items). 1 steel = 2 platinum = 5 bronze = 10 copper = 50 silver. Nearly
+always it comes right before `COMBAT` and is the loot of that fight. The
+outposts open their armoury with `SAVE 1, [7F6C]`, a `TREASURE` naming the
+stock, then `COMBAT`; the temple with `SAVE 1, [7EE2]` and `COMBAT`.
 
 ## Executable
 

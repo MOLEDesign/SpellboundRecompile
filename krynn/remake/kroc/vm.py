@@ -13,7 +13,7 @@ Requests yielded:
     ('clearbox',)               clear the text area
     ('delay',)                  short pause
     ('combat', monsters)        fight; send back True if the party won
-    ('treasure', args)          treasure found
+    ('treasure', args)          treasure found (TREASURE's operands: coins, item block)
     ('note', text)              something not implemented yet (logged)
 
 Memory map (word addresses, as the original engine):
@@ -335,6 +335,9 @@ class VM:
         won = yield ('combat', list(self.game.monsters))
         self.game.monsters = []
         self.set(0x7EC7, 0 if won else 1)
+        loot = self.game.take_loot()
+        if won and loot is not None:
+            yield ('treasure', loot)
 
     def op_29(self, i):                       # ENCOUNTER MENU
         """Monsters in view: COMBAT / WAIT / FLEE / ADVANCE (or PARLAY up close).
@@ -408,7 +411,14 @@ class VM:
             return Halt
 
     def op_27(self, i):                       # TREASURE
-        yield ('treasure', [self.value(a) for a in i.args])
+        args = [self.value(a) for a in i.args]
+        nxt = self.block.decode(i.addr + i.size)
+        if nxt.op == 0x24:
+            # the loot of the fight that follows (or a shop's stock): handed out
+            # by COMBAT, after a victory
+            self.game.set_loot(args)
+            return
+        yield ('treasure', args)
 
     def op_41(self, i):                       # ADD EP
         self.game.add_experience(self.value(i.args[0]), self.value(i.args[1]))

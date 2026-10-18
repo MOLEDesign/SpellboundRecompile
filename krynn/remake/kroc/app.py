@@ -13,6 +13,8 @@ from . import savegame
 from .journal import Journal, JournalView
 from .save_screen import SaveView
 from .camp_screen import CampView
+from .inventory import ItemsView, ShopView, TempleView, TreasureView
+from .world import SHOP_FLAG, TEMPLE_FLAG
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 # Everything is drawn on a 1920x1080 frame, then fitted to the window.
@@ -215,15 +217,28 @@ class App:
                 self.wait_until = time.time() + 0.6
             elif k == 'combat':
                 self.flush()
-                self.combat = CombatScreen(self, encounter.build(self.world, req[1], self.world.vm.rng))
+                vm = self.world.vm
+                if vm.get(SHOP_FLAG) == 1:            # the scripts open shops and temples
+                    vm.set(SHOP_FLAG, 0)              # through COMBAT with a flag set
+                    self.overlay = ShopView(self, self.world.shop_stock)
+                    self.answer = True
+                elif vm.get(TEMPLE_FLAG) == 1:
+                    vm.set(TEMPLE_FLAG, 0)
+                    self.overlay = TempleView(self)
+                    self.answer = True
+                elif not req[1]:
+                    self.answer = True                # nothing to fight
+                else:
+                    self.combat = CombatScreen(self, encounter.build(self.world, req[1], self.world.vm.rng))
             elif k == 'program':
                 if req[1] == 9:
                     self.world.rest()
                     self.add_text('The party rests and recovers.', False)
                     self.flush()
             elif k == 'treasure':
-                self.add_text('You find treasure.', False)
-                self.flush()
+                found, items = self.world.treasure(req[1])
+                if found or items:
+                    self.overlay = TreasureView(self, found, items)
             elif k == 'note':
                 print('[ecl]', req[1])
             elif k == 'block':
@@ -285,6 +300,9 @@ class App:
                 self.notify('Finish what you are doing first: you can save when the party is free to move.')
             else:
                 self.overlay = SaveView(self, 'save')
+            return
+        if ev.key == pygame.K_i and not self.combat:
+            self.overlay = ItemsView(self, self.world.selected)
             return
         if ev.key == pygame.K_e:
             if self.busy():

@@ -392,6 +392,43 @@ def test_camp(gf):
     assert 'combat' in kinds, kinds
 
 
+def test_items(gf):
+    """Item records and names; AC/THAC0/damage rebuilt from items; treasure and money."""
+    from kroc.world import World, Files
+    from cok import items as I
+    w = World(files=Files(gf.source))
+    types, words = w.files.item_types(), w.files.item_words()
+    assert words[8] == 'Mace' and words[90] == 'of'
+    mace = w.files.item_block(68)[0]
+    assert mace.title(words, False, types) == 'Mace' and mace.title(words, True, types) == 'Mace of Disruption +1'
+    scroll = w.files.item_block(67)[1]
+    assert set(scroll.effects) == {46, 49, 52}, 'Dispel Magic, Hold Person, Protection 10ft'
+    for c in w.party:                       # the saved figures come out of the items exactly
+        saved = (c.ac, c.thac0, c.weapon)
+        c.refresh(types, words)
+        assert (c.ac, c.thac0, c.weapon) == saved, (c.name, saved, (c.ac, c.thac0, c.weapon))
+    knight = w.party[0]
+    plate = next(i for i in knight.items if i.type == 36)
+    plate.ready = False
+    knight.refresh(types, words)
+    assert knight.ac == 6, knight.ac        # shield 1, DEX 17: 10 - 1 - 3
+    plate.ready = True
+    sword = next(i for i in knight.items if i.type == 18)
+    sword.plus = 2
+    knight.refresh(types, words)
+    assert knight.thac0 == 15 and knight.weapon == (1, 8, 8)
+    bow = I.Item('Short Bow', 25)
+    knight.items.append(bow)
+    assert I.can_ready(bow, knight.items, types) is None, 'a bow is slung beside the sword'
+    two = I.Item('Two-Handed Sword', 20)
+    assert I.can_ready(two, knight.items, types), 'no two-handed sword with a shield'
+    # money: TREASURE fills the purse; paying uses the small coins first
+    found, items = w.treasure([100, 0, 0, 20, 5, 1, 0, 16])
+    assert found == {'silver': 100, 'platinum': 20, 'steel': 5, 'gems': 1} and len(items) == 13
+    assert w.wealth() == 2 + 10 + 5
+    assert w.pay(11) and w.wealth() == 6 and not w.pay(7)
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

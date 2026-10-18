@@ -67,6 +67,18 @@ it in Python, so its worst flaws can be fixed.
   the night is interrupted. Where and how often a rest is interrupted
   comes from each map's own camp script, as in the original, checked once
   a night instead of every hour or so.
+* **Treasure, items and the armoury**: the loot a fight is set up with is
+  handed over after you win, and each item goes to whoever you choose.
+  Coins go into one purse the whole party shares (the original made you
+  pool and share coins by hand); it pays in steel and makes its own
+  change. Items carry their real names from the game's word list, with
+  magic hidden until identified ("Mace" turns out to be a Mace of
+  Disruption +1). I shows each character's items: readying armour or a
+  weapon recalculates AC, THAC0 and damage (the formula reproduces the
+  saved party's figures exactly), a bow can stay slung beside a sword,
+  potions of healing work and mages scribe spells from scrolls. The
+  outposts' armouries buy, sell, identify and take gems and jewelry; the
+  temples heal for steel.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -96,9 +108,10 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* casting spells outside combat (other than Fix's healing), scribing scrolls,
-  the gods' bonus spells for clerics
-* items, treasure, shops, training
+* casting spells outside combat (other than Fix's healing), the gods' bonus
+  spells for clerics
+* wands, potions and scrolls in combat; the vault (banking)
+* training and levelling up
 * sound and music
 
 ## Play
@@ -118,6 +131,7 @@ python3 remake/krynn.py --load A           # carry on from saved game A
 | L | search/look |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
 | J | the journal (entries and tavern tales found so far) |
+| I | items: ready, give, drop, use (potions, scrolls to scribe) |
 | E | make camp: rest, rest until healed, fix (heal with spells), memorise spells, save |
 | F5 / F9 | save / load (ten slots, A to J) |
 | F11 | full screen |
@@ -158,7 +172,7 @@ cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl,
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
 remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal,
-                savegame, save_screen, magic (spell slots, moons), camp_screen
+                savegame, save_screen, magic (spell slots, moons), camp_screen, inventory
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

@@ -47,6 +47,7 @@ def snapshot(world, visited=(), label=''):
         'selected': world.selected,
         'clock': world.clock,
         'minutes': world.minutes,
+        'purse': world.purse,
         'journal': [list(r) for r in world.journal_found],
         'visited': sorted(list(v) for v in visited),
     }
@@ -70,6 +71,7 @@ def restore(data, files=None, log=None):
     w.selected = data['selected']
     w.clock = data['clock']
     w.minutes = data.get('minutes', w.minutes)
+    w.purse.update(data.get('purse', {}))
     w.journal_found = [tuple(r) for r in data['journal']]
     if data['block'] is not None:
         vm.load(data['block'])

@@ -5,8 +5,14 @@ from cok.dax import Container
 from cok.gamefiles import GameFiles
 from cok.geo import GeoMap
 
+from cok.items import Item
+
 from .vm import VM, IN_DUNGEON
 
+# coins, as the TREASURE instruction lists them, and their worth in steel
+COINS = ('silver', 'copper', 'bronze', 'platinum', 'steel', 'gems', 'jewelry')
+COIN_VALUE = {'silver': 1 / 50, 'copper': 1 / 10, 'bronze': 1 / 5, 'platinum': 1 / 2, 'steel': 1}
+SHOP_FLAG, TEMPLE_FLAG = 0x7F6C, 0x7EE2      # set before COMBAT: a shop / a temple, not a fight
 NIGHT = 8 * 60                  # a night's rest, in minutes
 REST_INTERVAL, REST_CHANCE = 0x7ED2, 0x7ED3     # set by the precamp script
 NEW_GAME_BLOCK = 0x24       # "At the Inn of the Last Home in Solace..."
@@ -75,7 +81,28 @@ class Files:
     def monster_items(self, mid, area=None):
         from cok.items import parse_dax_items
         c, _ = self.find('mon', mid, ('itm.dax',), prefer=area)
-        return parse_dax_items(c.get(mid)) if c is not None else []
+        return parse_dax_items(c.get(mid), monster=True) if c is not None else []
+
+    def item_words(self):
+        if not hasattr(self, '_words'):
+            from cok.items import load_words
+            self._words = load_words(self.gf.read('game')) if 'game' in self.gf else {}
+        return self._words
+
+    def item_block(self, bid):
+        """The items of ITEMn.DAX block bid (a treasure or a shop's stock)."""
+        from cok.items import parse_dax_items
+        c, _ = self.find('item', bid, ('.dax',))
+        return parse_dax_items(c.get(bid)) if c is not None else []
+
+    def all_items(self):
+        """Every item record on the disks: the pool random treasure is drawn from."""
+        out = []
+        for name in ('item1.dax', 'item2.dax'):
+            c = self.container(name)
+            for bid in (c.ids() if c is not None else []):
+                out.extend(self.item_block(bid))
+        return out
 
     def tiles(self, name):
         """Combat tile set (DUNGCOM/WILDCOM/RANDCOM) as a Picture."""
@@ -114,7 +141,6 @@ class Character:
         self.name = name
         self.raw = raw
         self.items = list(items)          # cok.items.Item (from the .SWG file)
-        self.experience = 0
         self.dead = False
         r = raw if len(raw) >= 0x1AA else bytes(0x1AA)
         self.base_thac0 = 60 - r[0x5A] if r[0x5A] else 20     # without strength bonuses
@@ -132,18 +158,52 @@ class Character:
         self.spells = list(self.memorised)        # in memory now: used ones return on a rest
         self.book = [i for i in range(1, 95) if r[0x65 + i]]       # grimoire / prayer list
         self.levels = dict(zip(self.CLASSES, r[0xFE:0x106]))
+        self.experience = int.from_bytes(r[0x11E:0x122], 'big')
+        # what strength (and race, items' quirks...) adds, worked out once from the
+        # saved figures and the items readied at the time, so that readying other
+        # weapons and armour gives the right AC, THAC0 and damage
+        self.hit_bonus = None
+        self.dmg_bonus = None
+
+    def calibrate(self, types):
+        from cok import items as I
+        it, t = I.melee_weapon(self.items, types)
+        plus = it.plus if it else 0
+        self.hit_bonus = self.base_thac0 - self.thac0 - plus
+        base = t.dice[2] if t else 0
+        self.dmg_bonus = self.weapon[2] - base - plus
+
+    def refresh(self, types, words=None):
+        """AC, THAC0 and weapon damage from the readied items."""
+        from cok import items as I
+        if self.hit_bonus is None:
+            self.calibrate(types)
+        self.ac = I.armour_class(self.items, types, self.stats.get('DEX', 10), words)
+        it, t = I.melee_weapon(self.items, types)
+        plus = it.plus if it else 0
+        self.thac0 = self.base_thac0 - self.hit_bonus - plus
+        if t is None:
+            self.weapon = (1, 2, self.dmg_bonus)              # fists
+        else:
+            n, size, bonus = t.dice
+            self.weapon = (n or 1, size or 4, bonus + plus + self.dmg_bonus)
 
     # --- saving -------------------------------------------------------------------
     def to_dict(self):
         return {'name': self.name, 'raw': self.raw.hex(), 'hp': self.hp, 'dead': self.dead,
                 'experience': self.experience, 'memorised': self.memorised, 'spells': self.spells,
                 'book': self.book,
-                'items': [[i.name, i.type, i.ready, i.quantity] for i in self.items]}
+                'items': [i.to_list() for i in self.items],
+                'bonus': [self.hit_bonus, self.dmg_bonus], 'ac': self.ac, 'thac0': self.thac0,
+                'weapon': list(self.weapon)}
 
     @classmethod
     def from_dict(cls, d):
         from cok.items import Item
-        c = cls(d['name'], bytes.fromhex(d['raw']), [Item(*i) for i in d['items']])
+        c = cls(d['name'], bytes.fromhex(d['raw']), [Item.from_list(i) for i in d['items']])
+        c.hit_bonus, c.dmg_bonus = d.get('bonus', [None, None])
+        c.ac, c.thac0 = d.get('ac', c.ac), d.get('thac0', c.thac0)
+        c.weapon = tuple(d.get('weapon', c.weapon))
         c.hp, c.dead, c.experience = d['hp'], d['dead'], d['experience']
         c.memorised, c.spells = list(d['memorised']), list(d['spells'])
         c.book = list(d.get('book', c.book))
@@ -192,6 +252,8 @@ class World:
         self.moved = False
         self.journal_found = []      # (kind, n) of journal entries / tavern tales heard
         self.wall_loads = []         # LOAD WALLS calls since the wall set changed (for saves)
+        self.purse = dict.fromkeys(COINS, 0)    # the party's money, shared
+        self.shop_stock = []         # items of the last TREASURE seen in a shop
 
     # --- party (placeholder until character creation is rebuilt) -------------
     def load_party(self):
@@ -204,6 +266,9 @@ class World:
                 swg = 'save/chrdata%d.swg' % n
                 its = parse_swg(self.files.gf.read(swg)) if swg in self.files.gf else []
                 party.append(Character(raw[:16].split(b'\0')[0].decode('latin-1'), raw, its))
+        types = self.files.item_types()
+        for c in party:
+            c.calibrate(types)
         return party or [Character('HERO')]
 
     def monster_name(self, mid):
@@ -228,6 +293,65 @@ class World:
         for c in self.party:
             c.experience += amount
         self.log('The party gains %d experience.' % amount)
+
+    # --- money and treasure -----------------------------------------------------
+    def wealth(self):
+        """The purse's coins in steel pieces."""
+        return int(sum(self.purse[c] * v for c, v in COIN_VALUE.items()))
+
+    def pay(self, steel):
+        """Spend coins worth `steel`, cheapest coins first; False if too poor."""
+        if steel > self.wealth():
+            return False
+        need = float(steel)
+        for c in ('silver', 'copper', 'bronze', 'platinum', 'steel'):
+            if need <= 0:
+                break
+            take = min(self.purse[c], int(-(-need // COIN_VALUE[c])))
+            self.purse[c] -= take
+            need -= take * COIN_VALUE[c]
+        if need < 0:                                  # change, in steel and silver
+            self.purse['steel'] += int(-need)
+            self.purse['silver'] += int(round((-need - int(-need)) * 50))
+        return True
+
+    def treasure(self, args):
+        """TREASURE silver, copper, bronze, platinum, steel, gems, jewelry, item block.
+        Coins go straight into the party's purse; returns (coins found, items).
+        Item block 255 is none, 128 + n is n items picked at random."""
+        found = {c: n for c, n in zip(COINS, args[:7]) if n}
+        bid = args[7] if len(args) > 7 else 255
+        if bid == 255:
+            items = []
+        elif bid >= 128:
+            pool = [i for i in self.files.all_items() if i.value]
+            items = [self.vm.rng.choice(pool) for _ in range(bid - 128)] if pool else []
+            items = [Item.from_list(i.to_list()) for i in items]      # copies
+        else:
+            items = self.files.item_block(bid)
+        if self.vm.get(SHOP_FLAG) == 1:
+            self.shop_stock = items                   # the next COMBAT opens the shop
+            return {}, []
+        for c, n in found.items():
+            self.purse[c] += n
+        return found, items
+
+    def set_loot(self, args):
+        """TREASURE just before COMBAT: a shop's stock, or what the fight will yield."""
+        if self.vm.get(SHOP_FLAG) == 1:
+            self.treasure(args)
+            self.loot = None
+        else:
+            self.loot = args
+
+    def take_loot(self):
+        loot, self.loot = getattr(self, 'loot', None), None
+        return loot
+
+    def refresh_party(self):
+        types, words = self.files.item_types(), self.files.item_words()
+        for c in self.party:
+            c.refresh(types, words)
 
     @property
     def day(self):
