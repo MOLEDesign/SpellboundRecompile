@@ -22,3 +22,5 @@ tools/asset_render
 remake/data/
 tools/bake_remake
 __pycache__/
+remake/.DS_Store
+.DS_Store
