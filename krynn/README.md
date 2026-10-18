@@ -89,6 +89,15 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   spell from those open to the Red or White Robes. Unlike the original,
   experience beyond the next level is never lost, and a new level never
   gives fewer than half the hit die's points.
+* **Magic items in combat**: I in a fight lists the character's potions,
+  wands, the necklace of missiles and scrolls, and each is aimed like a
+  spell, with the same preview. Wands spend charges, potions are drunk,
+  a scroll loses each spell as it is read (only by its own robe). Party
+  members on auto drink healing potions when badly hurt. Readied weapons
+  keep their special powers: the Dragonlance doubles its damage against
+  dragons, the Mace of Disruption against undead, the long sword +4 vs
+  reptiles hits draconians harder, and the gauntlets of ogre power and
+  girdle of giant strength raise a weak character's strength bonuses.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -120,7 +129,7 @@ scripts are still to be rebuilt:
   save disk)
 * casting spells outside combat (other than Fix's healing), the gods' bonus
   spells for clerics
-* wands, potions and scrolls in combat; the vault (banking)
+* the vault (banking)
 * changing knightly order at a hall
 * sound and music
 

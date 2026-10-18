@@ -185,14 +185,19 @@ class Character:
         if self.hit_bonus is None:
             self.calibrate(types)
         self.ac = I.armour_class(self.items, types, self.stats.get('DEX', 10), words)
+        from .magic_items import strength_items
         it, t = I.melee_weapon(self.items, types)
         plus = it.plus if it else 0
-        self.thac0 = self.base_thac0 - self.hit_bonus - plus
+        hit, dmg = self.hit_bonus, self.dmg_bonus
+        if words:
+            least_hit, least_dmg = strength_items(self, words, types)   # gauntlets, girdles
+            hit, dmg = max(hit, least_hit or hit), max(dmg, least_dmg or dmg)
+        self.thac0 = self.base_thac0 - hit - plus
         if t is None:
-            self.weapon = (1, 2, self.dmg_bonus)              # fists
+            self.weapon = (1, 2, dmg)                         # fists
         else:
             n, size, bonus = t.dice
-            self.weapon = (n or 1, size or 4, bonus + plus + self.dmg_bonus)
+            self.weapon = (n or 1, size or 4, bonus + plus + dmg)
 
     # --- saving -------------------------------------------------------------------
     def to_dict(self):

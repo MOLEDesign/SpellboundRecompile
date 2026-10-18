@@ -627,17 +627,26 @@ class Battle:
             self.damage(d, d.hp + (10 if d.side == PARTY else 0),
                         '%s slays the helpless %s.' % (a.name, d.name))
             return True
+        extra_hit, extra_dmg, mult = self.slaying(a, d)
         r = self.rng.randint(1, 20)
-        if d.helpless or r == 20 or (r != 1 and r >= self.need(a, d, thac0, penalty)):
+        if d.helpless or r == 20 or (r != 1 and r >= self.need(a, d, thac0, penalty - extra_hit)):
             if d.images > 0 and self.rng.randrange(d.images + 1) > 0:
                 d.images -= 1
                 self.log('%s strikes one of %s\'s images.' % (a.name, d.name))
                 return False
-            dmg = max(1, roll(self.rng, atk.dice, atk.size, atk.bonus) + a.mod('dmg'))
+            dmg = max(1, (roll(self.rng, atk.dice, atk.size, atk.bonus) + a.mod('dmg') + extra_dmg) * mult)
             self.damage(d, dmg, '%s %s %s for %d.' % (a.name, verb, d.name, dmg))
             return True
         self.log(('%s misses %s.' if melee else '%s shoots at %s and misses.') % (a.name, d.name))
         return False
+
+    @staticmethod
+    def slaying(a, d):
+        """(to hit, damage, multiplier) a's weapon gains against d's kind."""
+        s = getattr(a, 'slayer', None)
+        if s and any(w in d.name.upper() for w in s[0]):
+            return s[1], s[2], s[3]
+        return 0, 0, 1
 
     def attack(self, a, d, free=False):
         """One attack round of a against d (all of a's attacks, or one when free)."""

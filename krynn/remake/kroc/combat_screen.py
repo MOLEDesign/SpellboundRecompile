@@ -8,6 +8,8 @@ Keys on your turn:
     RETURN or X                       attack the target (if next to you)
     F, or click a distant enemy       shoot the target (bow, sling, darts...)
     B                                 bandage a dying friend next to you
+    I                                 use a magic item (potion, wand, scroll, necklace),
+                                      aimed like a spell
     M                                 cast a spell: pick it from the list (arrows + RETURN,
                                       or its number), then aim with the arrows or the
                                       mouse; the squares and creatures it will hit are
@@ -178,6 +180,8 @@ class CombatScreen:
             return
         if ev.key == pygame.K_m:
             self.open_spells()
+        elif ev.key == pygame.K_i:
+            self.open_spells(items=True)
         elif ev.key in DIRS:
             dx, dy = DIRS[ev.key]
             self.move_or_attack(dx, dy)
@@ -214,13 +218,17 @@ class CombatScreen:
                 out.append(sp)
         return out
 
-    def open_spells(self):
+    def usable(self, c):
+        """Powers of c's magic items (potions, wands, scrolls...)."""
+        return c.item_powers() if getattr(c, 'item_powers', None) else []
+
+    def open_spells(self, items=False):
         c = self.cur
-        options = self.castable(c)
+        options = self.usable(c) if items else self.castable(c)
         if not options:
-            self.b.log('%s has no combat spells left.' % c.name)
+            self.b.log('%s has no %s.' % (c.name, 'magic items to use' if items else 'combat spells left'))
             return
-        self.casting = {'list': options, 'i': 0}
+        self.casting = {'list': options, 'i': 0, 'items': items}
 
     def cancel(self):
         if self.casting is not None:
@@ -230,7 +238,11 @@ class CombatScreen:
         st, c = self.casting, self.cur
         if ev.key == pygame.K_ESCAPE:
             # from aiming, step back to the list
-            self.casting = {'list': self.castable(c), 'i': 0} if 'spell' in st else None
+            if 'spell' in st:
+                items = st.get('items', False)
+                self.casting = {'list': self.usable(c) if items else self.castable(c), 'i': 0, 'items': items}
+            else:
+                self.casting = None
             return
         if 'list' in st:
             n = len(st['list'])
@@ -257,15 +269,16 @@ class CombatScreen:
         if why is not None:
             self.b.log('Cannot cast %s: %s.' % (sp.name, why))
             return
+        items = bool(self.casting and self.casting.get('items'))
         if not sp.needs_target:
-            self.casting = {'spell': sp, 'aim': (c.x, c.y)}
+            self.casting = {'spell': sp, 'aim': (c.x, c.y), 'items': items}
             self.do_cast()
             return
         if sp.shape == 'ally' or sp.shape == 'square' or self.target is None:
             aim = (c.x, c.y)
         else:
             aim = (self.target.x, self.target.y)
-        self.casting = {'spell': sp, 'aim': aim}
+        self.casting = {'spell': sp, 'aim': aim, 'items': items}
 
     def aim_target(self):
         """What the spell being aimed is aimed at: a Combatant or a cell."""
@@ -685,18 +698,20 @@ class CombatScreen:
         x = r.x + 20
         y += 8
         if 'list' in st:
-            screen.blit(self.small.render('CAST WHICH SPELL?', True, HILITE), (x, y))
+            screen.blit(self.small.render('USE WHICH ITEM?' if st.get('items') else 'CAST WHICH SPELL?',
+                                          True, HILITE), (x, y))
             y += 40
             st['top'] = y
             for i, sp in enumerate(st['list']):
-                n = c.spells.count(sp.id)
+                n = sp.charges if getattr(sp, 'item', None) else c.spells.count(sp.id)
                 why = SP.problem(self.b, c, sp)
                 col = HILITE if i == st['i'] else (TEXT if why is None else DIM)
                 if i == st['i']:
                     pygame.draw.rect(screen, (50, 50, 90), (r.x + 8, y - 2, r.w - 16, self.LIST_ROW))
                 label = '%d %s' % (i + 1, sp.name) if i < 9 else '  ' + sp.name
                 screen.blit(self.small.render(label[:24], True, col), (x, y))
-                t = self.small.render('x%d  L%d' % (n, sp.level), True, DIM)
+                t = self.small.render(('x%d' % n) if getattr(sp, 'item', None) else 'x%d  L%d' % (n, sp.level),
+                                      True, DIM)
                 screen.blit(t, (r.right - 20 - t.get_width(), y))
                 y += self.LIST_ROW
                 if y > r.bottom - 80:
@@ -770,7 +785,7 @@ class CombatScreen:
         for ln in rows[-n:]:
             screen.blit(self.small.render(ln, True, TEXT), (r.x + 16, y))
             y += 34
-        help_ = ('arrows/QEZC move   bump or click: attack   F shoot   M magic   T target   '
+        help_ = ('arrows/QEZC move   bump/click: attack   F shoot   M magic   I item   T target   '
                  'B bandage   SPACE end turn   U auto   L flee   V zoom')
         screen.blit(self.small.render(help_, True, DIM), (self.VIEW.x, self.VIEW.bottom + 14))
 

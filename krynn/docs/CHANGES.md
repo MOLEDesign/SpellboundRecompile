@@ -30,6 +30,7 @@ the original's: the remake reads them from your own disks.
 | Hard to tell how far you can move or what is threatened | Squares you can reach are lit, squares enemies threaten are marked, and the panel shows your hit chance and damage against the target. |
 | Area spells aimed blind | Before you cast, the squares a spell covers are lit, every creature it will hit is outlined, and you are warned if friends are inside a Fireball or Stinking Cloud. |
 | Swapping between bow and sword by hand | A bow stays slung beside a melee weapon; F shoots, moving into an enemy strikes. |
+| Wands and potions had to be readied, and an unidentified one could not be told apart | I lists every usable item with its power and charges; nothing needs readying first. |
 | Arrows spent | After a victory the party recovers half its arrows and quarrels and every thrown dart and javelin. |
 | Monsters fight to the last goblin | Monsters check morale and may break and run (see Rule choices). |
 | Playing every character every round | U hands a character to the computer; shift+U the whole party. |
@@ -80,6 +81,7 @@ to change.
 | Experience and levels | The manual's advancement tables and level limits (pp.56-58). Multi-class characters share earned experience between their classes. | `remake/kroc/training.py` |
 | THAC0 by level | AD&D first-edition matrices (fighters improve every 2 levels, clerics every 3, thieves 4, mages 5); matches every saved character | `training.thac0_for` |
 | Hit points per level | One hit die by class (fighters and knights d10, rangers and clerics d8, thieves d6, mages d4), at least half the die, plus constitution (manual p.55); shared out for multi-class characters | `training.roll_hp` |
+| Item powers | Wands: Magic Missiles (2 missiles), Fireballs, Lightning, Ice Storm, Paralyzation (Hold, up to 3) cast at level 6; Necklace of Missiles: fireballs at level 5. Potions: Healing 2d4+2, Extra Healing 3d8+3, Speed (hasted 6 rounds), Invisibility. Dragonlance and Mace of Disruption: double damage against dragons / undead; sword +4 vs reptiles: +3 more against draconians and dragons. Gauntlets of ogre power: strength 18/00; girdle of giant strength: +3 to hit, +7 damage. | `remake/kroc/magic_items.py` |
 | A mage's new spell | Chosen from the spells open to the mage's order (manual p.54) | `training.WHITE`, `training.RED` |
 | Moons | Solinari 36 days, Lunitari 28, Nuitari 8, all full on day 1. Waxing: +1 spell. High sanction: +2 spells, +1 to saves, +1 level (level 6+, INT 15+). Low sanction: -1 save, -1 level. | `magic.MOONS`, `magic.PHASE_EFFECT` |
 | Spell effects | AD&D spell descriptions: ranges, areas, durations, saves | `TABLE` in `remake/kroc/spells.py` |
@@ -118,7 +120,6 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* wands, potions and scrolls used in combat
 * the vault (banking at the outposts)
 * casting spells outside combat (other than Fix's healing)
 * the gods' bonus spells for clerics

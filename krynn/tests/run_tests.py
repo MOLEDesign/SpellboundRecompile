@@ -460,6 +460,48 @@ def test_training(gf):
     assert g2.levels == garin.levels and g2.hp_max == garin.hp_max and g2.spell_picks == 2
 
 
+def test_magic_items(gf):
+    """Wands spend charges, potions are drunk, scrolls only for their robe, slaying weapons."""
+    import random
+    from cok.items import Item
+    from kroc import encounter, magic_items as MI, spells as SP
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    w.files.area = '1'
+    words, types = w.files.item_words(), w.files.item_types()
+    pool = {it.title(words, True, types): it for it in w.files.all_items()}
+    copy = lambda name: Item.from_list(pool[name].to_list())
+    by = {c.name: c for c in w.party}
+    knight, garin, kal = by['SIR STRONGSWORD'], by['GARIN'], by['KAL']
+    knight.items += [copy('Wand of Fireballs'), copy('Potion of Healing')]
+    garin.items.append(copy('Red MU Scroll 3 Spells'))
+    kal.items.append(copy('Red MU Scroll 3 Spells'))
+    scroll = pool['Red MU Scroll 3 Spells'].effects
+    assert [p.spell.id for p in MI.powers(garin, words, types)] == [s for s in scroll if SP.SPELLS[s].combat]
+    assert not MI.powers(kal, words, types), 'a White Robe cannot read a Red scroll'
+    b = encounter.build(w, [(9, 6, 9)], random.Random(2))
+    kc = next(c for c in b.party if c.ref is knight)
+    wand = next(p for p in kc.item_powers() if 'Fireball' in p.name)
+    charges = wand.item.effects[0]
+    goblin = b.enemies[0]
+    b.turn, kc.attacked = kc, False
+    SP.cast(b, kc, wand, (goblin.x, goblin.y))
+    assert wand.item.effects[0] == charges - 1 and goblin.status != 'ok'
+    # the AI drinks a healing potion when badly hurt
+    kc.attacked, kc.hp = False, 3
+    pick = SP.choose(b, kc)
+    assert pick and 'Healing' in pick[0].name, pick
+    SP.cast(b, kc, *pick)
+    assert kc.hp > 3 and not any('Potion' in i.name for i in knight.items)
+    # the Dragonlance doubles its damage against dragons
+    from kroc.combat import Battle
+    kc.slayer = MI.slayer(knight, words, types)
+    assert Battle.slaying(kc, goblin) == (0, 0, 1)
+    knight.items.append(copy('Footmans Dragonlance +5'))
+    knight.items[-1].ready = True
+    assert MI.slayer(knight, words, types)[3] == 2
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

@@ -396,13 +396,14 @@ def clear_path(b, c, cell):
 
 def problem(b, c, sp, target=None):
     """Why c cannot cast sp now (None when it can)."""
+    item = getattr(sp, 'item', None)
     if not sp.combat:
         return sp.note or 'not used in combat'
-    if c.has('silenced'):
+    if c.has('silenced') and (item is None or sp.slot is not None):
         return 'silenced'
     if c.attacked:
         return 'already acted'
-    if sp.id not in c.spells:
+    if item is None and sp.id not in c.spells:
         return 'not memorised'
     if not sp.needs_target or target is None:
         return None
@@ -437,12 +438,21 @@ def problem(b, c, sp, target=None):
 
 def cast(b, c, sp, target=None):
     """c casts sp (which must be castable); returns the combatants affected."""
-    lv = caster_level(c, sp)
-    c.spells.remove(sp.id)
+    item = getattr(sp, 'item', None)
     c.attacked = True
     c.half_moves = 0
-    c.conditions.pop('invisible', None)
-    b.log('%s casts %s.' % (c.name, sp.name))
+    if item is None:
+        lv = caster_level(c, sp)
+        c.spells.remove(sp.id)
+        b.log('%s casts %s.' % (c.name, sp.name))
+    else:
+        lv = sp.cast_level or caster_level(c, sp.spell)
+        b.log('%s uses %s.' % (c.name, sp.name))
+        note = sp.use()
+        if note:
+            b.log(note)
+    if sp.hostile:
+        c.conditions.pop('invisible', None)
     if sp.shape == 'square':
         c.x, c.y = target
         b.log('%s steps through a door in space.' % c.name)
@@ -464,19 +474,28 @@ def _worth(t):
 
 def choose(b, c):
     """(spell, target) the AI would cast now, or None."""
-    if not c.spells or c.has('silenced') or c.attacked:
+    items = c.item_powers() if getattr(c, 'item_powers', None) else []
+    if (not c.spells and not items) or c.attacked:
         return None
     friends = [f for f in (b.party if c.side == PARTY else b.enemies) if f.present]
     foes = [f for f in b.foes(c) if f.active]
     best = None
     seen = set()
-    for sid in c.spells:
-        sp = SPELLS.get(sid)
-        if sp is None or not sp.combat or sid in seen:
+    candidates = [] if c.has('silenced') else [SPELLS.get(sid) for sid in c.spells]
+    candidates += items
+    for sp in candidates:
+        key = sp.name if getattr(sp, 'item', None) else sp and sp.id
+        if sp is None or not sp.combat or key in seen or problem(b, c, sp) is not None:
             continue
-        seen.add(sid)
+        seen.add(key)
         options = []
-        if sp.shape == 'ally' and sp.id in (3, 57, 63):
+        if getattr(sp, 'item', None) is not None and sp.shape == 'self':
+            if sp.heals and c.hp < c.hp_max * 0.4:
+                options.append((3.5 + (c.hp_max - c.hp) / 4.0, None))
+            elif not sp.heals and foes and not c.has('hasted') and not c.has('invisible') \
+                    and len(foes) >= 3:
+                options.append((2.0, None))
+        elif sp.shape == 'ally' and sp.id in (3, 57, 63):
             for f in friends:
                 if f.hp < f.hp_max * 0.4 and problem(b, c, sp, f) is None:
                     options.append((3.0 + (f.hp_max - f.hp) / 4.0, f))
