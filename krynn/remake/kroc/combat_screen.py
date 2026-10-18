@@ -140,18 +140,19 @@ class CombatScreen:
             self.ai = None
             self.end_turn()
             return
+        pace = getattr(self.app.world, 'speed', 1.0)      # Alter: combat speed
         if kind == 'attack':
-            self.flash[self.cur] = time.time() + ATTACK_DELAY
-            self.next_ai = time.time() + ATTACK_DELAY
+            self.flash[self.cur] = time.time() + ATTACK_DELAY * pace
+            self.next_ai = time.time() + ATTACK_DELAY * pace
         elif kind == 'cast':
             sp, target = what
             self.show_blast(self.cur, sp, target)
-            self.next_ai = time.time() + 0.9
+            self.next_ai = time.time() + 0.9 * pace
         elif kind == 'shoot':
             self.launch(self.cur, what)
-            self.next_ai = time.time() + SHOT_TIME * self.cur.missile.shots + 0.2
+            self.next_ai = time.time() + (SHOT_TIME * self.cur.missile.shots + 0.2) * pace
         else:
-            self.next_ai = time.time() + STEP_DELAY
+            self.next_ai = time.time() + STEP_DELAY * pace
         if self.b.check_end():
             self.ai = None
             self.finish()

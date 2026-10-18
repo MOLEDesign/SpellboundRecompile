@@ -181,7 +181,6 @@ manual. What is still open:
   (0x04, 0x0D, 0x38: invisibility, blinking, death throes in the books),
   Sir Lebaum's (0x47-0x4E), the spectral minion's (0x67), the kender's
   (0x5B, 0x5C) and the elves' (0x5F)
-* the original's Alter (icons and game speed) and party order menus
 
 ## Play
 
@@ -203,7 +202,7 @@ python3 remake/krynn.py --new              # make a new party first
 | J | the journal (entries and tavern tales found so far) |
 | V | character sheet |
 | I | items: ready, give, drop, use (potions, scrolls to scribe) |
-| E | make camp: rest, rest until healed, fix (heal with spells), memorise spells, save |
+| E | make camp: rest, rest until healed, fix (heal with spells), cast, memorise, alter (party order, icons, combat speed), save |
 | F5 / F9 | save / load (ten slots, A to J) |
 | F8 | sound on/off |
 | F11 | full screen |

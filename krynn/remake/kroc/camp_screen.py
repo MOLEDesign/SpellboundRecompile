@@ -20,6 +20,7 @@ MENU = (('REST', 'Rest one night'),
         ('FIX', 'Fix: clerics heal, then rest as needed'),
         ('CAST', 'Cast a spell: cures, Raise Dead, Remove Curse...'),
         ('MEMORISE', 'Memorise spells'),
+        ('ALTER', 'Alter: party order, icons, combat speed'),
         ('SAVE', 'Save the game'),
         ('EXIT', 'Break camp'))
 CLASS_NAME = {magic.CLERIC: 'Cleric', magic.MAGE: 'Mage'}
@@ -93,6 +94,10 @@ class CampView:
                 self.message = 'No one in the party casts spells.'
                 return
             self.mode, self.pick = 'memorise', 0
+        elif word == 'ALTER':
+            from .character_screens import AlterView
+            self.done = True
+            self.app.overlay_next = AlterView(self.app)
         elif word == 'SAVE':
             self.done = True
             self.app.overlay_next = SaveView(self.app, 'save')

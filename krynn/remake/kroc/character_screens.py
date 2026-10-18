@@ -294,3 +294,77 @@ class CreateView(Panel):
             more = len(self.world.party) < MAX_PARTY
             self.text(screen, ('N: make another   ' if more else '') + 'RETURN: begin', x, y + ROW * 3, HILITE)
         self.text(screen, 'ESC: back a step', r.x + 40, r.bottom - 92, DIM)
+
+
+class AlterView(Panel):
+    """The original's Alter and Order: party order, icons, combat speed."""
+    TITLE = 'ALTER'
+    SPEEDS = (0.25, 0.5, 1.0, 1.5, 2.5)
+    SPEED_NAMES = ('fastest', 'fast', 'normal', 'slow', 'slowest')
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.sel = 0
+        self.art = Art(self.world, app.small)
+
+    @property
+    def ch(self):
+        return self.world.party[self.sel]
+
+    def key(self, ev):
+        k = ev.key
+        party = self.world.party
+        shift = ev.mod & pygame.KMOD_SHIFT
+        if k == pygame.K_ESCAPE:
+            self.done = True
+        elif k in (pygame.K_UP, pygame.K_DOWN):
+            step = -1 if k == pygame.K_UP else 1
+            j = (self.sel + step) % len(party)
+            if shift:                                   # move the character in the order
+                party[self.sel], party[j] = party[j], party[self.sel]
+            self.sel = j
+        elif k in (pygame.K_F1, pygame.K_F2, pygame.K_F3):
+            if 'monster' in self.ch.icon:
+                self.message = '%s keeps their own look.' % self.ch.name
+                return
+            icon = dict(self.ch.icon)
+            if k == pygame.K_F1:
+                icon['head'] = (icon['head'] + 1) % 9
+            elif k == pygame.K_F2:
+                bodies = (1, 11, 14, 24, 28)
+                icon['body'] = bodies[(bodies.index(icon['body']) + 1) % 5 if icon['body'] in bodies else 0]
+            else:
+                icon['colours'] = bytes(self.world.vm.rng.randint(0, 255) for _ in range(6))
+            self.ch.icon = icon
+        elif ev.unicode in ('+', '=', '-'):
+            i = self.SPEEDS.index(self.speed())
+            i = max(0, min(len(self.SPEEDS) - 1, i + (1 if ev.unicode == '-' else -1)))
+            self.world.speed = self.SPEEDS[i]
+
+    def speed(self):
+        v = getattr(self.world, 'speed', 1.0)
+        return v if v in self.SPEEDS else 1.0
+
+    def click(self, pos):
+        i = self.row_at(pos)
+        if i is not None:
+            self.sel = i
+        elif not self.rect.collidepoint(pos):
+            self.done = True
+
+    def draw(self, screen):
+        self.frame(screen)
+        r = self.rect
+        x, y = r.x + 40, r.y + 110
+        entries = [([(0, '%d  %s' % (n + 1, c.name)), (520, '/'.join(SHORT[k] for k in T.classes(c)))],
+                    'companion' if getattr(c, 'npc', False) else '', TEXT)
+                   for n, c in enumerate(self.world.party)]
+        self.list_items(screen, entries, self.sel, x, y, 1100, y + ROW * 9)
+        icon = self.art._compose(self.ch.icon) if 'monster' not in self.ch.icon else \
+            self.art.monster_icon(self.ch.icon['monster'], False, self.ch.icon.get('area'))
+        if icon is not None:
+            screen.blit(pygame.transform.scale(icon, (144, 144)), (r.x + 1260, y))
+        self.text(screen, 'Combat speed: %s' % self.SPEED_NAMES[self.SPEEDS.index(self.speed())],
+                  x, y + ROW * 10, HILITE)
+        self.text(screen, 'SHIFT+arrows: move in the order (the first leads and talks)   '
+                  'F1 head  F2 body  F3 colours   +/- speed   ESC done', x, r.bottom - 92, DIM)

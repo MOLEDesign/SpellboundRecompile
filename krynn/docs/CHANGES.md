@@ -142,4 +142,3 @@ How the data formats were decoded, including these offsets, is in
 * a few monster affect codes are not used yet: 0x04, 0x0D, 0x38 (auraks,
   Myrtani), 0x47-0x4E (Sir Lebaum), 0x67 (spectral minion), 0x5B, 0x5C
   (kender), 0x5F (elves)
-* the Alter menu (icons, game speed) and party order
