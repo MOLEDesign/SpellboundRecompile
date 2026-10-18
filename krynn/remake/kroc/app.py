@@ -13,6 +13,7 @@ from . import savegame
 from .journal import Journal, JournalView
 from .save_screen import SaveView
 from .camp_screen import CampView
+from .hall_screen import HallView
 from .inventory import ItemsView, ShopView, TempleView, TreasureView
 from .world import SHOP_FLAG, TEMPLE_FLAG
 from .world import World, OVERLAND_X, OVERLAND_Y
@@ -231,7 +232,10 @@ class App:
                 else:
                     self.combat = CombatScreen(self, encounter.build(self.world, req[1], self.world.vm.rng))
             elif k == 'program':
-                if req[1] == 9:
+                if req[1] == 0:                       # the hall (and travelling trainers)
+                    self.flush()
+                    self.overlay = HallView(self)
+                elif req[1] == 9:
                     self.world.rest()
                     self.add_text('The party rests and recovers.', False)
                     self.flush()

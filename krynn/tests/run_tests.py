@@ -429,6 +429,37 @@ def test_items(gf):
     assert w.pay(11) and w.wealth() == 6 and not w.pay(7)
 
 
+def test_training(gf):
+    """Levels match the manual's tables; training raises HP, THAC0, slots; mages learn a spell."""
+    import random
+    from kroc import training as T, magic, savegame
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    by = {c.name: c for c in w.party}
+    garin, kal, molly, knight = by['GARIN'], by['KAL'], by['MOLLY'], by['SIR STRONGSWORD']
+    for c in w.party:      # the saved levels sit on the right rows; THAC0 follows the matrices
+        assert T.thac0_for(c.levels) == c.base_thac0, c.name
+        assert not T.ready(c), c.name
+    assert T.table(garin, 'magic-user') == 'red' and T.table(kal, 'magic-user') == 'white'
+    assert T.table(kal, 'cleric') == 'good' and T.table(knight, 'knight') == 'crown'
+    assert T.limit(molly, 'fighter') == 5, 'kender fighters stop at 5 (STR 16)'
+    assert T.share(garin, 1000) == 500, 'two classes share the award'
+    garin.experience = 20000             # enough for fighter 5 (18,001) and mage 4 (18,000)
+    hp, slots = garin.hp_max, magic.slots(garin)
+    lines = T.train(garin, random.Random(1))
+    assert garin.levels['fighter'] == 4 and garin.levels['magic-user'] == 3, 'one level at a time'
+    assert garin.hp_max > hp and garin.base_thac0 == 18 and garin.spell_picks == 1, lines
+    assert magic.slots(garin)[(magic.MAGE, 2)] == 1 and (magic.MAGE, 2) not in slots
+    assert set(T.learnable(garin)) <= T.RED and 21 not in T.learnable(garin), 'Sleep is White only'
+    assert T.ready(garin) == ['fighter', 'magic-user'], 'nothing lost: training again goes on'
+    T.train(garin, random.Random(1))
+    assert garin.levels == dict(garin.levels, fighter=5, **{'magic-user': 4})
+    # the new levels survive a save
+    w2, _ = savegame.restore(json_roundtrip(savegame.snapshot(w)), w.files)
+    g2 = next(c for c in w2.party if c.name == 'GARIN')
+    assert g2.levels == garin.levels and g2.hp_max == garin.hp_max and g2.spell_picks == 2
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

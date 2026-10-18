@@ -82,6 +82,13 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   potions of healing work and mages scribe spells from scrolls. The
   outposts' armouries buy, sell, identify and take gems and jewelry; the
   temples heal for steel.
+* **Training**: the halls (and the travelling trainers) open a training
+  screen. The levels, experience tables and level limits are the manual's,
+  and each saved character falls exactly on them. Training raises hit
+  points, THAC0, saving throws and spell slots, and a mage picks a new
+  spell from those open to the Red or White Robes. Unlike the original,
+  experience beyond the next level is never lost, and a new level never
+  gives fewer than half the hit die's points.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -114,7 +121,7 @@ scripts are still to be rebuilt:
 * casting spells outside combat (other than Fix's healing), the gods' bonus
   spells for clerics
 * wands, potions and scrolls in combat; the vault (banking)
-* training and levelling up
+* changing knightly order at a hall
 * sound and music
 
 ## Play
@@ -175,7 +182,8 @@ cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl,
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
 remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal,
-                savegame, save_screen, magic (spell slots, moons), camp_screen, inventory
+                savegame, save_screen, magic (spell slots, moons), camp_screen, inventory,
+                training, hall_screen
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

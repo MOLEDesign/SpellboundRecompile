@@ -110,8 +110,12 @@ For example, black dragon: 1d4/1d4 claws (4 half-attacks), 3d6 bite, AC 3.
 Party records (`save/CHRDATAn.SAV`, 426 bytes) use a shifted layout:
 0x00 name, 0x10 stats, 0x1E-0x59 memorised spells (1-94; larger values are
 not spells), 0x5A 60 - base THAC0, 0x5B race, 0x5C class, 0x64 maximum HP,
-0x5E deity (clerics), 0x5F mage order (1 White Robes, 2 Red, 3 Black,
-0 none), 0x66-0xC3 spellbook: one byte per spell number at 0x65 + id (the
+0x5B race (0 Silvanesti, 1 Qualinesti, 2 half-elf, 3 mountain dwarf,
+4 hill dwarf, 5 kender, 6 human), 0x5C class combination (0 cleric ... 7
+knight, 8 cleric/fighter ... 13 fighter/mage, 14 fighter/thief, in the
+executable's list), 0x5D knightly order (1 Crown, 2 Sword, 3 Rose), 0x5E
+deity (1 Paladine, 2 Majere, 3 Kiri-Jolith, 4 Mishakal, 5 Sirrion, 6 Reorx,
+7 Shinare), 0x5F mage order (1 White Robes, 2 Red, 3 Black, 0 none), 0x66-0xC3 spellbook: one byte per spell number at 0x65 + id (the
 mage's grimoire, the cleric's prayers), 0xFE-0x105 levels (cleric, druid,
 fighter, paladin, ranger, magic-user, thief, knight), 0x11E experience (u32), 0x141-0x14B combat icon (head,
 body, slot, size 1 small / 2 normal, six colour bytes), 0x19B 60 - THAC0

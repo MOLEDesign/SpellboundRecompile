@@ -159,11 +159,17 @@ class Character:
         self.book = [i for i in range(1, 95) if r[0x65 + i]]       # grimoire / prayer list
         self.levels = dict(zip(self.CLASSES, r[0xFE:0x106]))
         self.experience = int.from_bytes(r[0x11E:0x122], 'big')
+        self.spell_picks = 0              # new grimoire spells owed after training
         # what strength (and race, items' quirks...) adds, worked out once from the
         # saved figures and the items readied at the time, so that readying other
         # weapons and armour gives the right AC, THAC0 and damage
         self.hit_bonus = None
         self.dmg_bonus = None
+
+    def gain(self, xp):
+        """Experience earned: a multi-class character shares it between the classes."""
+        from .training import share
+        self.experience += share(self, xp)
 
     def calibrate(self, types):
         from cok import items as I
@@ -192,7 +198,8 @@ class Character:
     def to_dict(self):
         return {'name': self.name, 'raw': self.raw.hex(), 'hp': self.hp, 'dead': self.dead,
                 'experience': self.experience, 'memorised': self.memorised, 'spells': self.spells,
-                'book': self.book,
+                'book': self.book, 'levels': self.levels, 'hp_max': self.hp_max,
+                'base_thac0': self.base_thac0, 'spell_picks': self.spell_picks,
                 'items': [i.to_list() for i in self.items],
                 'bonus': [self.hit_bonus, self.dmg_bonus], 'ac': self.ac, 'thac0': self.thac0,
                 'weapon': list(self.weapon)}
@@ -207,6 +214,10 @@ class Character:
         c.hp, c.dead, c.experience = d['hp'], d['dead'], d['experience']
         c.memorised, c.spells = list(d['memorised']), list(d['spells'])
         c.book = list(d.get('book', c.book))
+        c.levels.update(d.get('levels', {}))
+        c.hp_max = d.get('hp_max', c.hp_max)
+        c.base_thac0 = d.get('base_thac0', c.base_thac0)
+        c.spell_picks = d.get('spell_picks', 0)
         return c
 
     CLASSES = ('cleric', 'druid', 'fighter', 'paladin', 'ranger', 'magic-user', 'thief', 'knight')
@@ -291,7 +302,8 @@ class World:
 
     def add_experience(self, who, amount):
         for c in self.party:
-            c.experience += amount
+            if not c.dead:
+                c.gain(amount)
         self.log('The party gains %d experience.' % amount)
 
     # --- money and treasure -----------------------------------------------------

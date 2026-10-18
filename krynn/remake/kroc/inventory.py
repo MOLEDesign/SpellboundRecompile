@@ -106,7 +106,9 @@ class Panel:
             r = pygame.Rect(x - 10, y - 4, width, ROW - 2)
             if i == sel:
                 pygame.draw.rect(screen, (60, 60, 110), r)
-            self.text(screen, left, x, y, HILITE if i == sel else col)
+            parts = left if isinstance(left, (list, tuple)) else [(0, left)]
+            for dx, part in parts:                     # (x offset, text) columns
+                self.text(screen, part, x + dx, y, HILITE if i == sel else col)
             if right:
                 t = self.app.small.render(right, True, DIM)
                 screen.blit(t, (x + width - 30 - t.get_width(), y))
@@ -235,6 +237,10 @@ class ItemsView(Panel):
         from . import magic
         if not ch.levels.get('magic-user'):
             self.message = 'Only a mage can read it.'
+            return
+        red = len(ch.raw) > 0x5F and ch.raw[0x5F] in (2, 3)
+        if ('Red' in self.name(it, True)) != red:
+            self.message = 'Only a mage of the %s Robes can use it.' % ('Red' if not red else 'White')
             return
         top = max([lvl for (c, lvl) in magic.slots(ch, self.world.day)
                    if c == magic.MAGE and lvl != 'bonus'] or [0])

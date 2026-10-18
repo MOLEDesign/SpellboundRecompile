@@ -893,5 +893,5 @@ class Battle:
                 c.ref.hp = max(c.hp, -10)
                 c.ref.dead = c.status == DEAD
                 if self.result == 'won' and c.status in (OK, DYING):
-                    c.ref.experience += each
+                    c.ref.gain(each)
         return each

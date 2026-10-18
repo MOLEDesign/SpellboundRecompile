@@ -52,6 +52,14 @@ the original's: the remake reads them from your own disks.
 | Treasure split by hand through Take / Pool / Share menus | Coins go straight into the purse; you choose who carries each item, or press A to take all. |
 | Selling gems and jewelry one at a time | J sells all gems and jewelry in one go. |
 
+### Training
+
+| Original | Remake |
+|----------|--------|
+| A character who earned two levels between visits to a hall lost the experience beyond the first | Nothing is lost: each Train goes up one level per class, and the character can train again at once if the experience is there. |
+| Hit points for a new level rolled from scratch (a fighter could gain 1) | A new level never gives less than half the hit die, plus constitution. |
+| Who can train, and how far off the others are, found by trying | The hall lists every character's classes, experience and the next level's figure, and marks who is ready. |
+
 ### Saving
 
 | Original | Remake |
@@ -68,7 +76,11 @@ to change.
 |------|---------------|-------|
 | Natural healing | 1 HP per character level per 8-hour night | `World.night` in `remake/kroc/world.py` |
 | Rest interruptions | Each map's `precamp` script sets the chance (`7ED3`); rolled once per night | `World.camp` in `world.py` |
-| Spell slots | AD&D tables, the cleric's wisdom bonus, the moons (manual p.16). This reproduces the saved party's spells exactly. | `remake/kroc/magic.py` |
+| Spell slots | Krynn's tables (manual pp.57-58: White and Red Robes, clerics of good and of neutral gods, knights of the Sword and Rose), the cleric's wisdom bonus, the moons (p.16). This reproduces the saved party's spells exactly. | `SLOTS` in `remake/kroc/magic.py` |
+| Experience and levels | The manual's advancement tables and level limits (pp.56-58). Multi-class characters share earned experience between their classes. | `remake/kroc/training.py` |
+| THAC0 by level | AD&D first-edition matrices (fighters improve every 2 levels, clerics every 3, thieves 4, mages 5); matches every saved character | `training.thac0_for` |
+| Hit points per level | One hit die by class (fighters and knights d10, rangers and clerics d8, thieves d6, mages d4), at least half the die, plus constitution (manual p.55); shared out for multi-class characters | `training.roll_hp` |
+| A mage's new spell | Chosen from the spells open to the mage's order (manual p.54) | `training.WHITE`, `training.RED` |
 | Moons | Solinari 36 days, Lunitari 28, Nuitari 8, all full on day 1. Waxing: +1 spell. High sanction: +2 spells, +1 to saves, +1 level (level 6+, INT 15+). Low sanction: -1 save, -1 level. | `magic.MOONS`, `magic.PHASE_EFFECT` |
 | Spell effects | AD&D spell descriptions: ranges, areas, durations, saves | `TABLE` in `remake/kroc/spells.py` |
 | Sleep, Hold and coup de grace | Sleep affects 4 hit dice or fewer; a sleeping or held victim struck in melee dies | `spells.py`, `Battle.swing` in `combat.py` |
@@ -98,16 +110,18 @@ in play.
 | Area spells were blocked by creatures standing in the way | Only walls block a spell's line of sight. |
 | A creature asleep or held could still make free attacks and stop archers shooting | Only creatures able to act count as a threat. |
 | The combat log printed "shoots at BOZAK. and misses" | Fixed wording. |
+| Spell slots followed the AD&D tables, so Red Robes and neutral clerics had the wrong number of spells | Krynn's own tables from the manual. |
+| Any mage could scribe any scroll | A Red Robe can only use Red Robe scrolls and a White Robe White ones (manual p.17). |
 
 How the data formats were decoded, including these offsets, is in
 [FORMATS.md](FORMATS.md).
 
 ## Not yet rebuilt
 
-* training and levelling up
 * wands, potions and scrolls used in combat
 * the vault (banking at the outposts)
 * casting spells outside combat (other than Fix's healing)
 * the gods' bonus spells for clerics
+* changing knightly order at a hall
 * character creation and the character sheet (the party comes from the save disk)
 * sound and music

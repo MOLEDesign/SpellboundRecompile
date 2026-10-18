@@ -1,7 +1,8 @@
 """Memorising spells: slots per spell level, the spellbook, the moons of Krynn.
 
 Clerics and mages memorise spells into slots that depend on their level
-(AD&D tables), clerics get extra slots for high wisdom, and Krynn's mages
+(Krynn's tables, which differ by mage order and by the cleric's god),
+clerics get extra slots for high wisdom, and Krynn's mages
 get extra spells while their order's moon waxes (manual, The Moons of
 Magic):
 
@@ -25,13 +26,19 @@ from .spells import SPELLS
 
 CLERIC, MAGE = 'C', 'M'
 
-# caster level -> slots for spell levels 1, 2, 3 ...
-MAGE_SLOTS = {1: (1,), 2: (2,), 3: (2, 1), 4: (3, 2), 5: (4, 2, 1), 6: (4, 2, 2), 7: (4, 3, 2, 1),
-              8: (4, 3, 3, 2), 9: (4, 3, 3, 2, 1), 10: (4, 4, 3, 2, 2), 11: (4, 4, 4, 3, 3),
-              12: (4, 4, 4, 4, 4)}
-CLERIC_SLOTS = {1: (1,), 2: (2,), 3: (2, 1), 4: (3, 2), 5: (3, 3, 1), 6: (3, 3, 2), 7: (3, 3, 2, 1),
-                8: (3, 3, 3, 2), 9: (4, 4, 3, 2, 1), 10: (4, 4, 3, 3, 2), 11: (5, 4, 4, 3, 2),
-                12: (6, 5, 5, 3, 2)}
+# Krynn's own tables (manual pp. 57-58): level -> slots for spell levels 1, 2, 3, 4
+SLOTS = {
+    'white': ((1,), (2,), (2, 1), (3, 2), (4, 2, 1), (4, 2, 2), (4, 3, 2, 1), (4, 3, 3, 2)),
+    'red': ((1,), (2,), (2, 1), (3, 2, 1), (4, 3, 1), (4, 3, 2), (4, 3, 2, 1), (4, 3, 3, 2)),
+    'good': ((1,), (2,), (2, 1), (2, 2), (3, 3, 1), (3, 3, 2), (3, 3, 2, 1), (3, 3, 3, 2)),
+    'neutral': ((2,), (2, 1), (3, 2, 1), (4, 2, 2), (4, 3, 2), (4, 3, 2, 1), (4, 4, 3, 1), (4, 4, 3, 2)),
+    # knights of the Sword and the Rose pray for cleric spells from level 6
+    'knight': ((), (), (), (), (), (1,), (2,), (2, 1)),
+}
+
+
+def _table(levels, row):
+    return levels[min(len(levels), row) - 1] if row > 0 else ()
 WIS_BONUS = {13: (1,), 14: (2,), 15: (2, 1), 16: (2, 2), 17: (2, 2, 1), 18: (2, 2, 1, 1)}
 
 # reversed (evil) cleric spells, druid spells and the scroll/item duplicates
@@ -67,23 +74,34 @@ def moon_effect(ch, day):
     return save, extra, level
 
 
+def knight_casts(ch):
+    return ch.levels.get('knight', 0) >= 6 and len(ch.raw) > 0x5D and ch.raw[0x5D] in (2, 3)
+
+
 def caster_levels(ch):
     lv = ch.levels
-    return {CLERIC: max(lv.get('cleric', 0), lv.get('paladin', 0) - 8),
+    knight = lv.get('knight', 0) - 5 if knight_casts(ch) else 0
+    return {CLERIC: max(lv.get('cleric', 0), lv.get('paladin', 0) - 8, knight),
             MAGE: max(lv.get('magic-user', 0), lv.get('ranger', 0) - 8)}
 
 
 def slots(ch, day=0):
     """{(class, spell level): slots} plus (MAGE, 'bonus') for the moon's gift."""
+    from .training import table
     out = {}
-    levels = caster_levels(ch)
-    if levels[CLERIC] > 0:
-        base = CLERIC_SLOTS[min(12, levels[CLERIC])]
+    lv = ch.levels
+    if lv.get('cleric') or lv.get('druid'):
+        base = _table(SLOTS[table(ch, 'cleric')], max(lv.get('cleric', 0), lv.get('druid', 0)))
+    elif knight_casts(ch):
+        base = _table(SLOTS['knight'], lv['knight'])
+    else:
+        base = ()
+    if base:
         bonus = WIS_BONUS.get(min(18, ch.stats.get('WIS', 0)), ())
         for i, n in enumerate(base):
             out[(CLERIC, i + 1)] = n + (bonus[i] if i < len(bonus) else 0)
-    if levels[MAGE] > 0:
-        for i, n in enumerate(MAGE_SLOTS[min(12, levels[MAGE])]):
+    if lv.get('magic-user'):
+        for i, n in enumerate(_table(SLOTS[table(ch, 'magic-user')], lv['magic-user'])):
             out[(MAGE, i + 1)] = n
         extra = moon_effect(ch, day)[1]
         if extra:
