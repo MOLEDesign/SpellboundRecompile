@@ -59,6 +59,17 @@ class Files:
         attack = gfx.decode_block(c.get(mid | 0x80)) if (mid | 0x80) in c else ready
         return ready, attack
 
+    def item_types(self):
+        if not hasattr(self, '_types'):
+            from cok.items import load_types
+            self._types = load_types(self.gf.read('items')) if 'items' in self.gf else {}
+        return self._types
+
+    def monster_items(self, mid, area=None):
+        from cok.items import parse_dax_items
+        c, _ = self.find('mon', mid, ('itm.dax',), prefer=area)
+        return parse_dax_items(c.get(mid)) if c is not None else []
+
     def tiles(self, name):
         """Combat tile set (DUNGCOM/WILDCOM/RANDCOM) as a Picture."""
         c = self.container(name + '.daa')
@@ -86,18 +97,20 @@ class Character:
 
     Offsets worked out from the save disk's party: 0x00 name, 0x10 six stat
     pairs (current, maximum), 0x1C exceptional strength, 0x5B race, 0x5C class,
-    0x64 maximum HP, 0x141-0x14B combat icon (head, body, slot, size, colours),
+    0x5A 60-THAC0 before bonuses, 0x64 maximum HP, 0x141-0x14B combat icon (head, body, slot, size, colours),
     0x19B 60-THAC0, 0x19C 60-AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
     0x1A8 current HP, 0x1A9 movement.
     """
     STATS = ('STR', 'INT', 'WIS', 'DEX', 'CON', 'CHA')
 
-    def __init__(self, name, raw=b''):
+    def __init__(self, name, raw=b'', items=()):
         self.name = name
         self.raw = raw
+        self.items = list(items)          # cok.items.Item (from the .SWG file)
         self.experience = 0
         self.dead = False
         r = raw if len(raw) >= 0x1AA else bytes(0x1AA)
+        self.base_thac0 = 60 - r[0x5A] if r[0x5A] else 20     # without strength bonuses
         self.stats = {s: r[16 + 2 * k] for k, s in enumerate(self.STATS)}
         self.hp_max = r[0x64] or 8
         self.hp = _s8(r[0x1A8]) if raw else self.hp_max
@@ -128,12 +141,15 @@ class World:
 
     # --- party (placeholder until character creation is rebuilt) -------------
     def load_party(self):
+        from cok.items import parse_swg
         party = []
         for n in range(1, 7):
             name = 'save/chrdata%d.sav' % n
             if name in self.files.gf:
                 raw = self.files.gf.read(name)
-                party.append(Character(raw[:16].split(b'\0')[0].decode('latin-1'), raw))
+                swg = 'save/chrdata%d.swg' % n
+                its = parse_swg(self.files.gf.read(swg)) if swg in self.files.gf else []
+                party.append(Character(raw[:16].split(b'\0')[0].decode('latin-1'), raw, its))
         return party or [Character('HERO')]
 
     def monster_name(self, mid):

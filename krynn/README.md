@@ -32,6 +32,12 @@ it in Python, so its worst flaws can be fixed.
   opportunity, dying at 0 and dead at -10). Monsters and the party take
   their stats from the game's own records. The screen shows how far you can
   move, which squares are threatened, and your hit chance and damage.
+  Missile weapons work: bows, crossbows, slings, the kender hoopak, darts
+  and javelins, read from each character's items (and from monsters'
+  inventories, such as the dark mages' darts). You need range and a clear
+  line of sight, you can't shoot with an enemy next to you, dexterity
+  helps the shot, and arrows are used up (half are gathered again after a
+  victory, along with any thrown darts or javelins).
 * **The journal is in the game**: when the story says "you record it in
   journal entry 51" or "you hear tavern tale 12", that page of the manual
   opens on screen, maps and pictures included. Every entry the party finds
@@ -55,8 +61,7 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* spells, missile weapons and items in combat (melee only so far), morale
-  and monster fleeing
+* spells in combat, morale and monster fleeing
 * items, treasure, shops, training, spells, resting rules (an inn heals
   everyone fully)
 * sound and music
@@ -89,10 +94,11 @@ In combat:
 | move into an enemy, or click it | attack |
 | click a lit square | walk there |
 | T, RETURN | pick a target, attack it |
+| F, or click a distant enemy | shoot it (the dashed line shows a clear shot) |
 | B | bandage a dying friend next to you |
 | SPACE / G | end the turn |
 | U / shift+U | the computer plays this character / the whole party (again to stop) |
-| F | flee from the edge of the field |
+| L | leave: flee from the edge of the field |
 | V | zoom in 2x around the active character |
 
 `python3 remake/play_text.py` plays the same scripts in the terminal.
@@ -110,7 +116,7 @@ python3 tests/run_tests.py               # format and script checks against your
 ## Layout
 
 ```
-cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, blocks, gamefiles, png
+cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, items, blocks, gamefiles, png
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
 remake/kroc/    vm, world, app, combat (rules), encounter, combat_screen, art, journal

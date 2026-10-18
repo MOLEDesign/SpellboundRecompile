@@ -133,7 +133,7 @@ def test_combat_dungeon(gf):
     ids = {bid for row in b.arena.block for bid in row if bid}
     assert any(i.startswith('W1-') for i in ids), ids
     assert all(blocks.parse(i)['kind'] in ('wall', 'door', 'edge') for i in ids), ids
-    big = [e for e in encounter.build(w, [(0x10, 1, 0)], random.Random(1)).enemies]
+    big = [e for e in encounter.build(w, [(0x10, 1, 0x10)], random.Random(1)).enemies]
     assert big and (big[0].w, big[0].h) == (1, 2), 'minotaur icon is 24x48'
     _fight(b)
 
@@ -151,6 +151,39 @@ def test_journal(gf):
     assert all(j.entry('journal', n) for n in range(1, 89)), 'journal entries 1-88'
     assert all(j.entry('tavern', n) for n in range(1, 58)), 'tavern tales 1-57'
     assert 'Paladine' in ' '.join(j.entry('journal', 51)['text'])
+
+
+def test_missiles(gf):
+    """Bows and darts: line of sight, range, no shooting in melee, ammunition used up."""
+    import random
+    from kroc import encounter
+    from kroc.combat import Arena, Battle, Combatant, Attack, Missile, PARTY, ENEMY
+    from cok.items import Item
+    a = Arena(12, 5, 'F-DUNG')
+    arrows = Item('Arrows', 30, True, 10)
+    archer = Combatant('ARCHER', PARTY, 10, 10, 5, 15, [Attack(2, 1, 6)], 12, ('party', None))
+    archer.missile = Missile('Short Bow', 1, 6, 0, 2, 8, 15, arrows, 'arrows', 'ammo')
+    gob = Combatant('GOBLIN', ENEMY, 50, 50, 6, 20, [Attack(2, 1, 6)], 6, ('monster', 9, '1'))
+    b = Battle(a, [archer], [gob], random.Random(1))
+    archer.x, archer.y, gob.x, gob.y = 1, 2, 7, 2
+    assert b.fire_problem(archer, gob) is None
+    a.block[2][4] = 'W1-01-01'                       # a wall in the way
+    assert b.fire_problem(archer, gob) == 'no clear shot'
+    a.block[2][4] = None
+    gob.x = 11
+    assert b.fire_problem(archer, gob).startswith('out of range')
+    gob.x = 2
+    assert b.fire_problem(archer, gob) == 'an enemy is next to you'
+    gob.x = 6
+    b.fire(archer, gob)
+    assert arrows.quantity == 8 and archer.attacked
+    # a real fight: the party's bows against Mysellia and two dart-throwing mages
+    w = _throtl_world(gf)
+    w.files.area = '1'
+    b = encounter.build(w, [(0x36, 1, 0), (0x27, 2, 0)], random.Random(4))
+    assert sum(1 for c in b.party if c.missile) >= 4
+    _fight(b)
+    assert any('shoots' in ln for ln in b.log_lines), 'nobody shot'
 
 
 def main():

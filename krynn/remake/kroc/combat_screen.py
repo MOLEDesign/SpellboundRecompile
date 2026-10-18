@@ -6,11 +6,12 @@ Keys on your turn:
     mouse: click a lit cell / enemy   walk there / attack it
     T                                 cycle the target shown in the panel
     RETURN or X                       attack the target (if next to you)
+    F, or click a distant enemy       shoot the target (bow, sling, darts...)
     B                                 bandage a dying friend next to you
     G or SPACE                        end the turn (guard)
     U                                 let the computer play this character
     shift+U                           ... the whole party (U again to take back)
-    F                                 flee (from the edge of the field)
+    L                                 leave: flee from the edge of the field
     V                                 zoom in/out
 """
 import time
@@ -39,6 +40,7 @@ BAD = (240, 100, 90)
 HILITE = (255, 255, 85)
 STEP_DELAY = 0.12
 ATTACK_DELAY = 0.45
+SHOT_TIME = 0.3           # an arrow's flight across the field
 
 
 class CombatScreen:
@@ -52,6 +54,7 @@ class CombatScreen:
         self.ai = None
         self.next_ai = 0
         self.effects = []           # (until, kind, cell, text)
+        self.shots = []             # (start px, end px, t0) arrows in flight
         self.flash = {}             # combatant -> until (attack pose)
         self.target = None
         self.done = False
@@ -84,7 +87,9 @@ class CombatScreen:
         foes = self.b.foes(c) if c else []
         if self.target not in foes:
             self.target = min(foes, key=lambda f: self.b.distance(c, f)) if foes else None
-        if c and c.side == PARTY and (c.attacked or (c.half_moves < 2 and not any(self.b.adjacent(c, f) for f in foes))):
+        can_shoot = c is not None and self.b.shoot_target(c) is not None
+        if c and c.side == PARTY and (c.attacked or (c.half_moves < 2 and not can_shoot
+                                                     and not any(self.b.adjacent(c, f) for f in foes))):
             self.end_turn()
 
     def end_turn(self):
@@ -119,6 +124,9 @@ class CombatScreen:
         if kind == 'attack':
             self.flash[self.cur] = time.time() + ATTACK_DELAY
             self.next_ai = time.time() + ATTACK_DELAY
+        elif kind == 'shoot':
+            self.launch(self.cur, what)
+            self.next_ai = time.time() + SHOT_TIME * self.cur.missile.shots + 0.2
         else:
             self.next_ai = time.time() + STEP_DELAY
         if self.b.check_end():
@@ -166,6 +174,8 @@ class CombatScreen:
         elif ev.key in (pygame.K_g, pygame.K_SPACE):
             self.end_turn()
         elif ev.key == pygame.K_f:
+            self.shoot(self.target)
+        elif ev.key == pygame.K_l:
             if self.b.arena.edge(c.x, c.y):
                 self.b.flee(c)
                 self.end_turn()
@@ -188,6 +198,31 @@ class CombatScreen:
                 self.end_turn()
                 return
             self.refresh()
+
+    def launch(self, a, t):
+        """Start the arrow animation from a to t."""
+        cp = self.cell_px()
+        ax, ay = self.to_px(a.x, a.y)
+        tx, ty = self.to_px(t.x, t.y)
+        now = time.time()
+        for k in range(a.missile.shots):
+            self.shots.append(((ax + a.w * cp // 2, ay + a.h * cp // 2),
+                               (tx + t.w * cp // 2, ty + t.h * cp // 2), now + k * SHOT_TIME))
+
+    def shoot(self, t):
+        c = self.cur
+        if t is None:
+            return
+        why = self.b.fire_problem(c, t)
+        if why is not None:
+            self.b.log('Cannot shoot: %s.' % why)
+            return
+        self.launch(c, t)
+        self.b.fire(c, t)
+        if self.b.check_end():
+            self.finish()
+            return
+        self.refresh()
 
     def attack(self, t):
         c = self.cur
@@ -217,6 +252,8 @@ class CombatScreen:
             self.target = o
             if self.b.adjacent(c, o):
                 self.attack(o)
+            elif c.missile is not None:
+                self.shoot(o)
             return
         path = self.b.path_to(c, cell)
         for p in path or []:
@@ -287,6 +324,19 @@ class CombatScreen:
                     continue
                 ov.fill((80, 160, 255, 32) if (x, y) not in threat else (255, 120, 60, 64))
                 screen.blit(ov, self.to_px(x, y))
+        # the line of a possible shot at the target
+        cur, t = self.cur, self.target
+        if cur is not None and cur.side == PARTY and self.ai is None and t is not None and t.active \
+                and cur.missile is not None and self.b.fire_problem(cur, t) is None:
+            a = self.to_px(cur.x, cur.y)
+            b = self.to_px(t.x, t.y)
+            a = (a[0] + cp // 2, a[1] + cp // 2)
+            b = (b[0] + t.w * cp // 2, b[1] + t.h * cp // 2)
+            n = max(1, int(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 // 14))
+            for k in range(0, n, 2):
+                p0 = (a[0] + (b[0] - a[0]) * k // n, a[1] + (b[1] - a[1]) * k // n)
+                p1 = (a[0] + (b[0] - a[0]) * (k + 1) // n, a[1] + (b[1] - a[1]) * (k + 1) // n)
+                pygame.draw.line(screen, (255, 230, 120), p0, p1, 2)
         # combatants
         now = time.time()
         for c in sorted(self.b.all, key=lambda c: (c.status == OK, c.y)):
@@ -317,12 +367,31 @@ class CombatScreen:
                 pygame.draw.rect(screen, HILITE, (px, py, w, h), pulse)
             elif c is self.target and self.cur and self.cur.side == PARTY:
                 pygame.draw.rect(screen, BAD, (px, py, w, h), 3)
+        self.draw_shots(screen, now)
         screen.set_clip(None)
         pygame.draw.rect(screen, FRAME, v.inflate(12, 12), 3)
         self.draw_panel(screen)
         self.draw_log(screen)
         if self.summary is not None:
             self.draw_summary(screen)
+
+    def draw_shots(self, screen, now):
+        live = []
+        for start, end, t0 in self.shots:
+            f = (now - t0) / SHOT_TIME
+            if f > 1:
+                continue
+            live.append((start, end, t0))
+            if f < 0:
+                continue
+            x = start[0] + (end[0] - start[0]) * f
+            y = start[1] + (end[1] - start[1]) * f
+            dx, dy = end[0] - start[0], end[1] - start[1]
+            ln = max(1.0, (dx * dx + dy * dy) ** 0.5)
+            tail = (x - dx / ln * 22, y - dy / ln * 22)
+            pygame.draw.line(screen, (240, 240, 220), tail, (x, y), 3)
+            pygame.draw.circle(screen, (255, 255, 255), (int(x), int(y)), 3)
+        self.shots = live
 
     def icon(self, c, attacking):
         kind = c.icon[0]
@@ -343,12 +412,12 @@ class CombatScreen:
             col = TEXT if p.status == OK else (BAD if p.status in (DYING, DEAD) else DIM)
             if p is c:
                 col = HILITE
-            put(p.name[:16], col, font=self.font)
-            y += 40
-            st = {OK: '', DYING: '  DYING', DEAD: '  DEAD', FLED: '  FLED'}[p.status]
-            put('HP %d/%d   AC %d%s' % (p.hp, p.hp_max, p.ac, st), DIM, 16)
-            y += 34
-        y += 8
+            st = {OK: '%d/%d' % (p.hp, p.hp_max), DYING: 'DYING', DEAD: 'DEAD', FLED: 'FLED'}[p.status]
+            put(p.name[:15], col)
+            t = self.small.render('%s  AC %d' % (st, p.ac), True, col if p is c else DIM)
+            screen.blit(t, (r.right - 20 - t.get_width(), y))
+            y += 38
+        y += 16
         if c is not None:
             who = c.name if c.side == PARTY else c.name + ' (enemy)'
             put('TURN: ' + who[:20], HILITE)
@@ -356,6 +425,13 @@ class CombatScreen:
             if c.side == PARTY:
                 put('Moves left %d' % (c.half_moves // 2), DIM)
                 y += 36
+                if c.missile is not None:
+                    m = c.missile
+                    put('%s, %d shot%s' % (m.name, m.shots, 's' if m.shots > 1 else ''), DIM)
+                    y += 34
+                    left = m.left()
+                    put('range %d%s' % (m.range, '' if left is None else ', %d %s' % (left, m.ammo_name)), DIM)
+                    y += 36
         t = self.target
         if t is not None and t.active and c is not None and c.side == PARTY:
             y += 8
@@ -367,18 +443,37 @@ class CombatScreen:
             put('Hit %d%%   damage %s' % (pct, ' '.join(a.text() for a in c.attacks)), DIM)
             y += 34
             put('in reach' if self.b.adjacent(c, t) else '%d squares away' % self.b.distance(c, t), DIM)
+            if c.missile is not None and not self.b.adjacent(c, t):
+                y += 34
+                why = self.b.fire_problem(c, t)
+                if why is None:
+                    put('F: shoot %dx %s, hit %d%%' % (c.missile.shots, c.missile.attack.text(),
+                                                     int(round(self.b.missile_to_hit(c, t) * 100))), GOOD)
+                else:
+                    put('cannot shoot: ' + why, DIM)
 
     def draw_log(self, screen):
         r = self.LOG
         pygame.draw.rect(screen, PANEL, r)
         pygame.draw.rect(screen, FRAME, r, 3)
         n = (r.h - 24) // 34
-        y = r.y + 12
+        rows = []
         for ln in self.b.log_lines[-n:]:
-            screen.blit(self.small.render(ln[:34], True, TEXT), (r.x + 16, y))
+            words, line = ln.split(' '), ''
+            for wd in words:
+                t = (line + ' ' + wd).strip()
+                if self.small.size(t)[0] > r.w - 32 and line:
+                    rows.append(line)
+                    line = '  ' + wd
+                else:
+                    line = t if not line.startswith('  ') else line + ' ' + wd
+            rows.append(line)
+        y = r.y + 12
+        for ln in rows[-n:]:
+            screen.blit(self.small.render(ln, True, TEXT), (r.x + 16, y))
             y += 34
-        help_ = ('arrows / QEZC move    bump or click an enemy: attack    T target    B bandage    '
-                 'SPACE end turn    U auto    F flee    V zoom')
+        help_ = ('arrows/QEZC move   bump or click: attack   F shoot   T target   B bandage   '
+                 'SPACE end turn   U auto   L flee   V zoom')
         screen.blit(self.small.render(help_, True, DIM), (self.VIEW.x, self.VIEW.bottom + 14))
 
     def draw_summary(self, screen):

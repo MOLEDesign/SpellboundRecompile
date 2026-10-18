@@ -16,6 +16,12 @@ against THAC0 - AC to hit, damage dice per attack, half-moves for movement
 (orthogonal 2, diagonal 3; budget = 2 x movement), attacks of opportunity
 when leaving an enemy's reach, and dying characters losing 1 HP a round
 until bandaged or dead at -10.
+
+Missiles (bows, crossbows, slings, darts, javelins, hoopaks): a combatant
+with a missile weapon and ammunition may shoot instead of fighting in melee
+at a foe in range and in line of sight (walls and other creatures block),
+but not while an enemy stands next to it. Each shot uses ammunition; dex,
+not strength, adjusts the roll, and beyond half range there is -2.
 """
 import heapq
 import random
@@ -48,6 +54,30 @@ class Attack:
         return '%dd%d%s' % (self.dice, self.size, b) if self.size else '%d' % max(1, self.dice + self.bonus)
 
 
+class Missile:
+    """A ranged weapon in someone's hands."""
+
+    def __init__(self, name, dice, size, bonus, shots, range_, thac0, ammo=None, ammo_name='',
+                 consumed=None):
+        self.name = name
+        self.attack = Attack(2, dice, size, bonus)
+        self.shots = max(1, shots)
+        self.range = range_
+        self.thac0 = thac0              # to-hit for missiles (dexterity, no strength)
+        self.ammo = ammo                # cok.items.Item whose quantity is used up, or None
+        self.ammo_name = ammo_name
+        self.consumed = consumed        # 'ammo' (arrows...) / 'thrown' (darts...) / None
+        self.fired = 0
+
+    def left(self):
+        return None if self.ammo is None else self.ammo.quantity
+
+    def text(self):
+        left = self.left()
+        amm = '' if left is None else ', %d %s' % (left, self.ammo_name or 'left')
+        return '%s x%d, range %d%s' % (self.name, self.shots, self.range, amm)
+
+
 class Combatant:
     def __init__(self, name, side, hp, hp_max, ac, thac0, attacks, move, icon,
                  size=(1, 1), xp=0, ref=None):
@@ -70,6 +100,7 @@ class Combatant:
         self.attacked = False
         self.guarding = False
         self.aoo_used = False
+        self.missile = None             # Missile, if it can shoot
 
     @property
     def active(self):
@@ -447,6 +478,88 @@ class Battle:
                 d.status = DYING
                 self.log('%s goes down!' % d.name)
 
+    # --- missiles ---------------------------------------------------------------
+    @staticmethod
+    def _line(x0, y0, x1, y1):
+        """Cells crossed going from cell centre to cell centre (both ends included)."""
+        n = max(abs(x1 - x0), abs(y1 - y0))
+        out = []
+        for i in range(n + 1):
+            t = i / n if n else 0
+            p = (int(round(x0 + (x1 - x0) * t)), int(round(y0 + (y1 - y0) * t)))
+            if not out or out[-1] != p:
+                out.append(p)
+        return out
+
+    def line_of_sight(self, a, d):
+        """True when a clear line runs from one of a's cells to one of d's."""
+        for ax, ay in a.cells():
+            for dx, dy in d.cells():
+                ok = True
+                for p in self._line(ax, ay, dx, dy)[1:-1]:
+                    if self.arena.opaque(*p):
+                        ok = False
+                        break
+                    o = self.occupant(*p)
+                    if o is not None and o is not a and o is not d and o.status == OK:
+                        ok = False
+                        break
+                if ok:
+                    return True
+        return False
+
+    def fire_problem(self, a, d):
+        """Why a cannot shoot at d now (None when it can)."""
+        m = a.missile
+        if m is None:
+            return 'no missile weapon'
+        if a.attacked:
+            return 'already attacked'
+        if m.left() is not None and m.left() <= 0:
+            return 'out of ' + (m.ammo_name or 'ammunition')
+        if any(self.adjacent(a, f) for f in self.foes(a)):
+            return 'an enemy is next to you'
+        if self.distance(a, d) > m.range:
+            return 'out of range (%d)' % m.range
+        if not self.line_of_sight(a, d):
+            return 'no clear shot'
+        return None
+
+    def missile_to_hit(self, a, d):
+        m = a.missile
+        need = m.thac0 - d.ac + (2 if self.distance(a, d) > m.range // 2 else 0)
+        need = max(2, min(20, need))
+        return (21 - need) / 20.0
+
+    def fire(self, a, d):
+        """a shoots its missile weapon at d (all its shots this round)."""
+        m = a.missile
+        a.attacked = True
+        a.half_moves = 0
+        long_range = self.distance(a, d) > m.range // 2
+        for _ in range(m.shots):
+            if not d.present or (d.status == DYING and d.side == ENEMY):
+                break
+            if m.left() is not None:
+                if m.left() <= 0:
+                    self.log('%s is out of %s.' % (a.name, m.ammo_name or 'ammunition'))
+                    break
+                m.ammo.quantity -= 1
+            m.fired += 1
+            r = self.rng.randint(1, 20)
+            need = m.thac0 - d.ac + (2 if long_range else 0)
+            if r == 20 or (r != 1 and r >= need):
+                dmg = max(1, roll(self.rng, m.attack.dice, m.attack.size, m.attack.bonus))
+                self.damage(d, dmg, '%s shoots %s for %d.' % (a.name, d.name, dmg))
+            else:
+                self.log('%s shoots at %s and misses.' % (a.name, d.name))
+        self.check_end()
+
+    def shoot_target(self, c):
+        """Best foe c can shoot right now (weakest first), or None."""
+        ok = [f for f in self.foes(c) if self.fire_problem(c, f) is None]
+        return min(ok, key=lambda f: (f.hp, self.distance(c, f))) if ok else None
+
     def bandage(self, a, d):
         if d.status == DYING and self.adjacent(a, d):
             d.bandaged = True
@@ -467,6 +580,11 @@ class Battle:
             yield ('attack', target)
             self.attack(c, target)
             return
+        t = self.shoot_target(c)
+        if t is not None:
+            yield ('shoot', t)
+            self.fire(c, t)
+            return
         r = self.reachable(c)
         # head for the cell next to the closest foe
         goals = []
@@ -485,11 +603,18 @@ class Battle:
             yield ('move', p)
             if not c.active:
                 return
+            if c.missile is not None and self.shoot_target(c) is not None:
+                break               # close enough to shoot: stop and fire
         foes = [f for f in self.foes(c) if self.adjacent(c, f)]
         if foes and c.active:
             target = min(foes, key=lambda f: f.hp)
             yield ('attack', target)
             self.attack(c, target)
+        elif c.active and not c.attacked:
+            t = self.shoot_target(c)
+            if t is not None:
+                yield ('shoot', t)
+                self.fire(c, t)
 
     def distance_cells(self, c, cell, f):
         return min(max(abs(cx - fx), abs(cy - fy))
@@ -507,6 +632,11 @@ class Battle:
                 if c.status == DYING:
                     c.hp = 0                     # stabilised after the fight
         for c in self.party:
+            m = c.missile
+            if m is not None and m.ammo is not None and self.result == 'won' and m.fired:
+                # after a victory the party gathers what it can: all thrown
+                # weapons, half of the arrows and quarrels
+                m.ammo.quantity += m.fired if m.consumed == 'thrown' else m.fired // 2
             if c.ref is not None:
                 c.ref.hp = max(c.hp, -10)
                 c.ref.dead = c.status == DEAD

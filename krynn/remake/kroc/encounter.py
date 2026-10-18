@@ -3,15 +3,37 @@ import random
 
 from cok import blocks
 
+from cok import items as I
+
 from .combat import (Attack, Battle, Combatant, ENEMY, PARTY, SPAN_X, SPAN_Y, SQUARE,
-                     dungeon_arena, open_arena, DYING, DEAD)
+                     Missile, dungeon_arena, open_arena, DYING, DEAD)
+
+HOOPAK = 67       # the kender sling-staff: fires stones, never used up
+
+
+def make_missile(owner_items, types, thac0):
+    found = I.best_missile(owner_items, types)
+    if found is None:
+        return None
+    item, t, ammo = found
+    n, size, bonus = t.dice
+    consumed = None
+    if ammo is not None:
+        consumed = 'ammo'
+    elif t.flags & I.THROWN and t.index != HOOPAK:
+        ammo, consumed = item, 'thrown'      # darts, javelins: the weapon itself flies
+    name = I.WEAPONS.get(t.index, item.name)
+    ammo_name = 'quarrels' if t.ammo == I.QUARREL else ('arrows' if t.ammo == I.ARROW else
+                                                        (name.lower() + 's' if consumed else ''))
+    return Missile(name, n or 1, size or 4, bonus, max(1, t.half_attacks // 2), t.range, thac0,
+                   ammo, ammo_name, consumed)
 
 
 def _s8(b):
     return b - 256 if b > 127 else b
 
 
-def monster_combatant(world, mid, n):
+def monster_combatant(world, mid, n, icon=None):
     """A monster from its MONnCHA record (offsets in docs/FORMATS.md)."""
     area = getattr(world.files, 'area', None)
     rec = world.files.monster(mid, area)
@@ -29,17 +51,29 @@ def monster_combatant(world, mid, n):
         attacks = [Attack(2, 1, 4)]
     move = min(rec[0xD5] or 6, 12)          # flying speeds are not used on the ground
     size = (1, 1)
-    ready, _ = world.files.combat_icon(mid, area)
+    # LOAD MONSTER's third operand picks the combat icon (CPICn.DAA id)
+    ready, _ = world.files.combat_icon(icon, area) if icon is not None else (None, None)
+    if ready is None:
+        icon = mid
+        ready, _ = world.files.combat_icon(mid, area)
     if ready is not None:
         size = (max(1, ready.width // 24), max(1, ready.height // 24))
-    return Combatant(name, ENEMY, hp, hp, 60 - rec[0x113], 60 - rec[0x59], attacks, move,
-                     ('monster', mid, area), size=size, xp=rec[0x130] | rec[0x131] << 8)
+    c = Combatant(name, ENEMY, hp, hp, 60 - rec[0x113], 60 - rec[0x59], attacks, move,
+                  ('monster', icon, area), size=size, xp=rec[0x130] | rec[0x131] << 8)
+    its = world.files.monster_items(mid, area)
+    c.missile = make_missile(its, world.files.item_types(), c.thac0)
+    if c.missile is not None and c.missile.ammo is not None:
+        c.missile.ammo = I.Item(c.missile.ammo_name, 0, True, 20)    # monsters' own supply
+    return c
 
 
-def party_combatant(ch):
+def party_combatant(ch, types=None):
     n, size, bonus = ch.weapon
     c = Combatant(ch.name, PARTY, ch.hp, ch.hp_max, ch.ac, ch.thac0, [Attack(2, n, size, bonus)],
                   ch.move, ('party', ch), ref=ch)
+    if types:
+        c.missile = make_missile(ch.items, types,
+                                 ch.base_thac0 - I.dex_missile_bonus(ch.stats.get('DEX', 10)))
     if ch.dead:
         c.status = DEAD
     elif ch.hp <= 0:
@@ -50,11 +84,12 @@ def party_combatant(ch):
 
 def build(world, monsters, rng=None):
     rng = rng or random.Random()
-    party = [party_combatant(ch) for ch in world.party if not ch.dead]
+    types = world.files.item_types()
+    party = [party_combatant(ch, types) for ch in world.party if not ch.dead]
     enemies = []
-    for mid, count, _pic in monsters:
+    for mid, count, pic in monsters:
         for k in range(max(1, count)):
-            enemies.append(monster_combatant(world, mid, k))
+            enemies.append(monster_combatant(world, mid, k, pic))
     if world.in_dungeon and world.geo is not None:
         area = getattr(world, 'map_area', '1') or '1'
         arena, _ = dungeon_arena(

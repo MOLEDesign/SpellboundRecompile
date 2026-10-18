@@ -125,6 +125,32 @@ the 13x5 map squares around the party into a skewed 50x25 grid, which is
 the fake isometric view. The remake draws the same area straight from
 above (`remake/kroc/combat.py`).
 
+## Items
+
+`items` on disk 1 is the item type table: a 2-byte header, then 128
+records of 16 bytes, indexed by item type:
+
+| byte | meaning |
+|------|---------|
+| 0 | slot (0 weapon, 1 shield, 2 armour, 10 ammunition and other) |
+| 1 | hands needed |
+| 2/3/4 | damage dice, size and bonus vs large creatures |
+| 5 | half-attacks per round (bows 4 = 2 shots, darts 6 = 3) |
+| 9/10/11 | damage dice, size and bonus vs normal creatures |
+| 12 | range in combat squares (0 = melee only) |
+| 13 | classes allowed |
+| 14 | flags: 0x01 uses arrows, 0x02 missile, 0x04 melee, 0x10 throwable, 0x80 uses quarrels |
+
+Weapon types 1-30 follow the order of the item-name word list in the
+executable (1 Battle Axe ... 18 Long Sword, 25 Short Bow, 27 Light
+Crossbow, 28 Sling, 30 Arrow). 67 is the kender hoopak.
+
+Item records are 63 bytes in `ITEMn.DAX` and `MONnITM.DAX` (type at 0x2E;
+monster item names are uninitialised) and 72 bytes in a saved character's
+`.SWG` (name as a C string, type at 0x30, readied flag at 0x3A, quantity
+at 0x40). The third operand of the ECL `LOAD MONSTER` instruction is the
+combat icon (`CPICn.DAA` id).
+
 ## Executable
 
 `game` is a hunk file of 101 code hunks compiled from Pascal. Each unit
