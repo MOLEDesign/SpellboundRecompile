@@ -20,8 +20,11 @@ it in Python, so its worst flaws can be fixed.
 * **Remake** (`remake/`): runs the original event scripts in a new ECL
   virtual machine. You get the story text, menus, the original pictures and
   animations, the overland map, monster sprites, and the first-person 3D
-  view with the original walls. New: readable text, mouse support, and an
-  automap of the squares you have visited (M).
+  view with the original walls. Laid out for 1920x1080: the original art is
+  enlarged by whole numbers (3D view 7x, big pictures 5x, combat 2x) so it
+  stays crisp, and text, roster and an always-visible automap of the squares
+  you have visited are drawn at full resolution. Any window size works
+  (letterboxed), F11 for full screen. Also new: mouse support.
 * **Overhead tactical combat**: the original's fake-isometric battlefield
   is replaced by a straight top-down grid built from the map around the
   party, or open ground outdoors. It uses the original combat icons and
@@ -54,6 +57,7 @@ scripts are still to be rebuilt:
 ```sh
 pip3 install pygame-ce
 python3 remake/krynn.py            # finds krynn/original/*.zip by itself
+python3 remake/krynn.py --size 1600x900    # or --fullscreen
 ```
 
 | key | action |
@@ -62,7 +66,6 @@ python3 remake/krynn.py            # finds krynn/original/*.zip by itself
 | ← → / A D | turn (overland: west/east) |
 | ↓ / S | turn around (overland: south) |
 | L | search/look |
-| M | automap on/off |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
 | F11 | full screen |
 | ESC | quit |
@@ -79,7 +82,7 @@ In combat:
 | SPACE / G | end the turn |
 | U / shift+U | the computer plays this character / the whole party (again to stop) |
 | F | flee from the edge of the field |
-| V | zoom out to the whole field |
+| V | zoom in 2x around the active character |
 
 `python3 remake/play_text.py` plays the same scripts in the terminal.
 

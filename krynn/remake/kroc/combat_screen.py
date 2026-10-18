@@ -45,11 +45,10 @@ class CombatScreen:
     def __init__(self, app, battle):
         self.app = app
         self.b = battle
-        self.s = app.scale
         self.font = app.font
         self.small = app.small
         self.art = Art(app.world, app.small)
-        self.zoom = 2               # V toggles the whole-field view
+        self.zoom = 1               # V: zoom in 2x around the active combatant
         self.ai = None
         self.next_ai = 0
         self.effects = []           # (until, kind, cell, text)
@@ -133,7 +132,7 @@ class CombatScreen:
                 self.done = True
             return
         if ev.key == pygame.K_v:
-            self.zoom = 1 if self.zoom == 2 else 2
+            self.zoom = 2 if self.zoom == 1 else 1
             return
         c = self.cur
         if ev.key == pygame.K_u:
@@ -229,12 +228,17 @@ class CombatScreen:
             self.end_turn()
 
     # --------------------------------------------------------------- geometry
+    # layout on the 1920x1080 frame: the whole 29x21 field at 48 px a cell
+    # (the original 24x24 icons and tiles at exactly 2x), panel on the right
+    VIEW = pygame.Rect(24, 24, 29 * 48, 21 * 48)
+    PANEL = pygame.Rect(VIEW.right + 24, 24, 1920 - VIEW.right - 48, 800)
+    LOG = pygame.Rect(PANEL.x, PANEL.bottom + 16, PANEL.w, VIEW.bottom - PANEL.bottom - 16)
+
     def cell_px(self):
-        return 8 * self.s * self.zoom
+        return 48 * self.zoom
 
     def view_rect(self):
-        s = self.s
-        return pygame.Rect(4 * s, 4 * s, 232 * s, 168 * s)
+        return self.VIEW
 
     def camera(self):
         """Top-left cell shown, keeping the active combatant in view."""
@@ -305,16 +309,16 @@ class CombatScreen:
                 pygame.draw.rect(screen, GOOD if c.side == PARTY else BAD, (px + 2, py + 2, w - 4, h - 4))
             # health bar
             frac = max(0, c.hp) / float(max(1, c.hp_max))
-            pygame.draw.rect(screen, (0, 0, 0), (px + 2, py + h - 4, w - 4, 3))
+            pygame.draw.rect(screen, (0, 0, 0), (px + 3, py + h - 7, w - 6, 5))
             pygame.draw.rect(screen, GOOD if frac > 0.5 else (HILITE if frac > 0.25 else BAD),
-                             (px + 2, py + h - 4, int((w - 4) * frac), 3))
+                             (px + 3, py + h - 7, int((w - 6) * frac), 5))
             if c is self.cur:
-                pulse = 2 + int(now * 4) % 2
+                pulse = 3 + 2 * (int(now * 4) % 2)
                 pygame.draw.rect(screen, HILITE, (px, py, w, h), pulse)
             elif c is self.target and self.cur and self.cur.side == PARTY:
-                pygame.draw.rect(screen, BAD, (px, py, w, h), 2)
+                pygame.draw.rect(screen, BAD, (px, py, w, h), 3)
         screen.set_clip(None)
-        pygame.draw.rect(screen, FRAME, v.inflate(4, 4), 2)
+        pygame.draw.rect(screen, FRAME, v.inflate(12, 12), 3)
         self.draw_panel(screen)
         self.draw_log(screen)
         if self.summary is not None:
@@ -327,66 +331,62 @@ class CombatScreen:
         return self.art.monster_icon(c.icon[1], attacking, c.icon[2])
 
     def draw_panel(self, screen):
-        s = self.s
-        r = pygame.Rect(240 * s, 4 * s, 76 * s, 168 * s)
+        r = self.PANEL
         pygame.draw.rect(screen, PANEL, r)
-        pygame.draw.rect(screen, FRAME, r, 2)
-        y = r.y + 3 * s
-        x = r.x + 3 * s
+        pygame.draw.rect(screen, FRAME, r, 3)
+        x, y = r.x + 20, r.y + 16
         c = self.cur
-        title = 'ROUND %d' % self.b.round
-        screen.blit(self.small.render(title, True, DIM), (x, y))
-        y += 9 * s
+        put = lambda text, col, dx=0, font=None: screen.blit((font or self.small).render(text, True, col), (x + dx, y))
+        put('ROUND %d' % self.b.round, DIM)
+        y += 44
         for p in self.b.party:
             col = TEXT if p.status == OK else (BAD if p.status in (DYING, DEAD) else DIM)
             if p is c:
                 col = HILITE
-            screen.blit(self.small.render(p.name[:13], True, col), (x, y))
-            y += 7 * s
-            st = {OK: '', DYING: ' DYING', DEAD: ' DEAD', FLED: ' FLED'}[p.status]
-            screen.blit(self.small.render('HP %d/%d AC %d%s' % (p.hp, p.hp_max, p.ac, st), True, DIM),
-                        (x + 4 * s, y))
-            y += 8 * s
-        y += 2 * s
+            put(p.name[:16], col, font=self.font)
+            y += 40
+            st = {OK: '', DYING: '  DYING', DEAD: '  DEAD', FLED: '  FLED'}[p.status]
+            put('HP %d/%d   AC %d%s' % (p.hp, p.hp_max, p.ac, st), DIM, 16)
+            y += 34
+        y += 8
         if c is not None:
             who = c.name if c.side == PARTY else c.name + ' (enemy)'
-            screen.blit(self.small.render('TURN: ' + who[:16], True, HILITE), (x, y))
-            y += 8 * s
+            put('TURN: ' + who[:20], HILITE)
+            y += 36
             if c.side == PARTY:
-                screen.blit(self.small.render('Moves left %d' % (c.half_moves // 2), True, DIM), (x, y))
-                y += 8 * s
+                put('Moves left %d' % (c.half_moves // 2), DIM)
+                y += 36
         t = self.target
         if t is not None and t.active and c is not None and c.side == PARTY:
-            screen.blit(self.small.render('TARGET: ' + t.name[:14], True, BAD), (x, y))
-            y += 7 * s
+            y += 8
+            put('TARGET: ' + t.name[:18], BAD)
+            y += 34
+            put('HP %d/%d   AC %d' % (t.hp, t.hp_max, t.ac), DIM)
+            y += 34
             pct = int(round(self.b.to_hit(c, t) * 100))
-            screen.blit(self.small.render('HP %d/%d AC %d' % (t.hp, t.hp_max, t.ac), True, DIM), (x, y))
-            y += 7 * s
-            dmg = ' '.join(a.text() for a in c.attacks)
-            screen.blit(self.small.render('Hit %d%%  dmg %s' % (pct, dmg), True, DIM), (x, y))
-            y += 7 * s
-            screen.blit(self.small.render('in reach' if self.b.adjacent(c, t) else
-                                          '%d cells away' % self.b.distance(c, t), True, DIM), (x, y))
+            put('Hit %d%%   damage %s' % (pct, ' '.join(a.text() for a in c.attacks)), DIM)
+            y += 34
+            put('in reach' if self.b.adjacent(c, t) else '%d squares away' % self.b.distance(c, t), DIM)
 
     def draw_log(self, screen):
-        s = self.s
-        r = pygame.Rect(4 * s, 176 * s, 312 * s, 22 * s)
+        r = self.LOG
         pygame.draw.rect(screen, PANEL, r)
-        lines = self.b.log_lines[-2:]
-        y = r.y + 1 * s
-        for ln in lines:
-            screen.blit(self.small.render(ln, True, TEXT), (r.x + 3 * s, y))
-            y += 7 * s
-        help_ = ('move: arrows/QEZC  bump or click: attack  T target  B bandage  '
-                 'SPACE end turn  U auto  F flee  V zoom')
-        screen.blit(self.small.render(help_, True, DIM), (r.x + 3 * s, r.bottom - 7 * s))
+        pygame.draw.rect(screen, FRAME, r, 3)
+        n = (r.h - 24) // 34
+        y = r.y + 12
+        for ln in self.b.log_lines[-n:]:
+            screen.blit(self.small.render(ln[:34], True, TEXT), (r.x + 16, y))
+            y += 34
+        help_ = ('arrows / QEZC move    bump or click an enemy: attack    T target    B bandage    '
+                 'SPACE end turn    U auto    F flee    V zoom')
+        screen.blit(self.small.render(help_, True, DIM), (self.VIEW.x, self.VIEW.bottom + 14))
 
     def draw_summary(self, screen):
-        s = self.s
-        r = pygame.Rect(60 * s, 60 * s, 200 * s, 60 * s)
+        r = pygame.Rect(0, 0, 900, 80 + 56 * len(self.summary))
+        r.center = self.VIEW.center
         pygame.draw.rect(screen, (40, 0, 0) if self.b.result == 'lost' else (0, 30, 10), r)
-        pygame.draw.rect(screen, FRAME, r, 2)
-        y = r.y + 6 * s
+        pygame.draw.rect(screen, FRAME, r, 4)
+        y = r.y + 40
         for i, ln in enumerate(self.summary):
-            screen.blit(self.font.render(ln, True, HILITE if i == 0 else TEXT), (r.x + 8 * s, y))
-            y += 11 * s
+            screen.blit(self.font.render(ln, True, HILITE if i == 0 else TEXT), (r.x + 48, y))
+            y += 56

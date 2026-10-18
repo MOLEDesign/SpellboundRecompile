@@ -11,8 +11,10 @@ from . import encounter
 from .combat_screen import CombatScreen
 from .world import World, OVERLAND_X, OVERLAND_Y
 
-SCALE = 3
-W, H = 320, 200
+# Everything is drawn on a 1920x1080 frame, then fitted to the window.
+# Original pictures are enlarged by whole numbers only, so the pixel art
+# stays crisp; text and panels are laid out at full resolution.
+W, H = 1920, 1080
 FONT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'fonts', 'PixelifySans.ttf')
 
 BG = (16, 16, 40)
@@ -21,9 +23,17 @@ TEXT = (255, 255, 255)
 HILITE = (255, 255, 85)
 DIM = (150, 150, 170)
 
-VIEW = pygame.Rect(8, 8, 88, 88)
-BIG = pygame.Rect(8, 8, 304, 120)
-ROSTER = pygame.Rect(104, 8, 208, 88)
+VIEW_ZOOM = 7                                   # 88x88 3D view / portraits
+VIEW = pygame.Rect(40, 40, 88 * VIEW_ZOOM, 88 * VIEW_ZOOM)
+BIG_ZOOM = 5                                    # 304x120 big pictures, overland map
+BIG = pygame.Rect((W - 304 * BIG_ZOOM) // 2, 40, 304 * BIG_ZOOM, 120 * BIG_ZOOM)
+ROSTER = pygame.Rect(VIEW.right + 40, 40, 800, VIEW.h)
+MAP = pygame.Rect(ROSTER.right + 32, 40, W - 40 - ROSTER.right - 32, W - 40 - ROSTER.right - 32)
+TEXT_TOP = VIEW.bottom + 40                     # text box under the view
+TEXT_TOP_BIG = BIG.bottom + 40                  # ... under a big picture
+TEXT_BOTTOM = H - 40
+FONT_SIZE, SMALL_SIZE = 38, 28
+LINE = 48
 
 KEYS = {
     pygame.K_UP: 'forward', pygame.K_w: 'forward', pygame.K_KP8: 'forward',
@@ -57,15 +67,15 @@ def surface_from(pic, frame=0, transparent=None):
 
 
 class App:
-    def __init__(self, source=None, scale=SCALE, fullscreen=False):
+    def __init__(self, source=None, size=None, fullscreen=False):
         pygame.init()
         pygame.display.set_caption('Champions of Krynn - remake')
-        flags = pygame.FULLSCREEN | pygame.SCALED if fullscreen else 0
-        self.scale = scale
-        self.screen = pygame.display.set_mode((W * scale, H * scale), flags)
-        self.canvas = pygame.Surface((W, H))
-        self.font = pygame.font.Font(FONT, 8 * scale)
-        self.small = pygame.font.Font(FONT, 6 * scale)
+        self.fullscreen = fullscreen
+        self.window_size = size or self.default_size()
+        self.window = self.open_window()
+        self.screen = pygame.Surface((W, H))          # the 1920x1080 frame
+        self.font = pygame.font.Font(FONT, FONT_SIZE)
+        self.small = pygame.font.Font(FONT, SMALL_SIZE)
         self.clock = pygame.time.Clock()
         self.notes = []
         self.world = World(log=self.log, files=None if source is None else None)
@@ -81,13 +91,56 @@ class App:
         self.sprite = None          # (Picture, distance)
         self.combat = None          # CombatScreen while fighting
         self.wait_until = 0
-        self.show_map = False
         self.visited = set()
         self.cache = {}
         self.gen = self.world.start()
         self.answer = None
         self.running = True
-        self.status = ''
+
+    # ------------------------------------------------------------------ window
+    @staticmethod
+    def default_size():
+        """1920x1080 when it fits, else the largest 16:9 window that does."""
+        info = pygame.display.Info()
+        dw, dh = info.current_w or W, info.current_h or H
+        if dw >= W and dh >= H + 60:
+            return W, H
+        k = min(dw * 0.92 / W, dh * 0.85 / H)
+        return max(640, int(W * k)), max(360, int(H * k))
+
+    def open_window(self):
+        if self.fullscreen:
+            return pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        return pygame.display.set_mode(self.window_size, pygame.RESIZABLE)
+
+    def toggle_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        self.window = self.open_window()
+
+    def fit(self):
+        """(scale, offset) placing the frame in the window, letterboxed."""
+        ww, wh = self.window.get_size()
+        k = min(ww / W, wh / H)
+        return k, ((ww - int(W * k)) // 2, (wh - int(H * k)) // 2)
+
+    def to_frame(self, pos):
+        k, (ox, oy) = self.fit()
+        return int((pos[0] - ox) / k), int((pos[1] - oy) / k)
+
+    def present(self):
+        k, (ox, oy) = self.fit()
+        if k == 1:
+            self.window.blit(self.screen, (ox, oy))
+        else:
+            self.window.fill((0, 0, 0))
+            size = (int(W * k), int(H * k))
+            img = pygame.transform.smoothscale(self.screen, size) if k < 1 else \
+                pygame.transform.scale(self.screen, size)
+            self.window.blit(img, (ox, oy))
+        pygame.display.flip()
+
+    def save_frame(self, path):
+        pygame.image.save(self.screen, path)
 
     # ------------------------------------------------------------------ util
     def log(self, text):
@@ -184,7 +237,7 @@ class App:
     # ------------------------------------------------------------------ input
     def key(self, ev):
         if ev.key == pygame.K_F11:
-            pygame.display.toggle_fullscreen()
+            self.toggle_fullscreen()
             return
         if self.combat is not None:
             self.combat.key(ev)
@@ -208,9 +261,6 @@ class App:
                     if it[:1].upper() == c:
                         self.choose(n)
                         break
-            return
-        if ev.key == pygame.K_m:
-            self.show_map = not self.show_map
             return
         if ev.key in KEYS:
             self.act(KEYS[ev.key])
@@ -245,33 +295,37 @@ class App:
     def draw(self):
         if self.combat is not None:
             self.combat.draw(self.screen)
-            pygame.display.flip()
+            self.present()
             return
-        c = self.canvas
+        c = self.screen
         c.fill(BG)
         w = self.world
         big = self.picture and self.picture[1] == 'big'
         overland = not w.in_dungeon and not self.picture and self.pic(0x79) is not None
         if big or overland:
             p = self.picture[0] if big else self.pic(0x79)
-            c.blit(surface_from(p, self._frame(p)), BIG.topleft)
-            pygame.draw.rect(c, FRAME, BIG.inflate(4, 4), 1)
+            self.blit_zoomed(surface_from(p, self._frame(p)), BIG.topleft, BIG_ZOOM)
+            pygame.draw.rect(c, FRAME, BIG.inflate(12, 12), 3)
             if overland:
                 x, y = w.vm.get(OVERLAND_X), w.vm.get(OVERLAND_Y)
                 if int(time.time() * 3) % 2:
-                    pygame.draw.rect(c, (255, 255, 255), (BIG.x + x * 8, BIG.y + y * 8, 8, 8), 1)
-            text_top = 132
+                    cell = 8 * BIG_ZOOM
+                    pygame.draw.rect(c, (255, 255, 255), (BIG.x + x * cell, BIG.y + y * cell, cell, cell), 4)
+            text_top = TEXT_TOP_BIG
         else:
-            self._draw_view(c)
-            pygame.draw.rect(c, FRAME, VIEW.inflate(4, 4), 1)
-            pygame.draw.rect(c, FRAME, ROSTER.inflate(4, 4), 1)
-            text_top = 104
-        pygame.draw.rect(c, FRAME, (6, text_top - 2, 308, 196 - text_top), 1)
-        pygame.transform.scale(c, self.screen.get_size(), self.screen)
-        if not (big or overland):
+            self._draw_view()
+            pygame.draw.rect(c, FRAME, VIEW.inflate(12, 12), 3)
+            pygame.draw.rect(c, FRAME, ROSTER.inflate(12, 12), 3)
             self._draw_roster()
+            self._draw_map()
+            text_top = TEXT_TOP
+        pygame.draw.rect(c, FRAME, (VIEW.x - 6, text_top - 6, W - 2 * VIEW.x + 12, TEXT_BOTTOM - text_top + 12), 3)
         self._draw_text(text_top)
-        pygame.display.flip()
+        self.present()
+
+    def blit_zoomed(self, surf, pos, zoom):
+        w, h = surf.get_size()
+        self.screen.blit(pygame.transform.scale(surf, (w * zoom, h * zoom)), pos)
 
     def _frame(self, p):
         if len(p.frames) == 1 or not self.picture:
@@ -280,29 +334,32 @@ class App:
         n = len(p.frames) - 1
         return 1 + int(t * 4) % n if t > 0.5 else 0
 
-    def _draw_view(self, c):
+    def _draw_view(self):
         w = self.world
         if self.picture and self.picture[1] == 'pic':
             p = self.picture[0]
-            c.blit(surface_from(p, self._frame(p)), VIEW.topleft)
-        elif self.show_map and w.geo:
-            self._draw_map(c)
+            self.blit_zoomed(surface_from(p, self._frame(p)), VIEW.topleft, VIEW_ZOOM)
         elif w.geo and w.slots:
             buf = self.renderer.render(w.geo, w.x, w.y, w.facing, w.slots)
-            s = indexed_surface(buf, 88, 88, gfx.EGA * 2)
-            c.blit(s, VIEW.topleft)
+            self.blit_zoomed(indexed_surface(buf, 88, 88, gfx.EGA * 2), VIEW.topleft, VIEW_ZOOM)
         else:
-            c.fill((0, 0, 0), VIEW)
+            self.screen.fill((0, 0, 0), VIEW)
         if self.sprite:
             sp, dist = self.sprite
             key = gfx.transparent_index(sp)
-            c.blit(surface_from(sp, dist, key), VIEW.topleft)
+            self.blit_zoomed(surface_from(sp, dist, key), VIEW.topleft, VIEW_ZOOM)
 
-    def _draw_map(self, c):
-        w = self.world
-        c.fill((0, 0, 0), VIEW)
-        cell = 5
-        ox, oy = VIEW.x + 4, VIEW.y + 4
+    def _draw_map(self):
+        """Automap of the squares visited on this map (always shown)."""
+        c, w = self.screen, self.world
+        pygame.draw.rect(c, FRAME, MAP.inflate(12, 12), 3)
+        c.fill((0, 0, 0), MAP)
+        if not (w.in_dungeon and w.geo):
+            t = self.small.render('no map here', True, DIM)
+            c.blit(t, t.get_rect(center=MAP.center))
+            return
+        cell = (MAP.w - 16) // 16
+        ox, oy = MAP.x + 8, MAP.y + 8
         for y in range(16):
             for x in range(16):
                 if (w.geo_id, x, y) not in self.visited:
@@ -314,32 +371,31 @@ class App:
                                         (6, (0, 0, 0, cell)), (2, (cell, 0, cell, cell))):
                     if sq.walls[d]:
                         col = (200, 200, 200) if sq.doors[d] == 0 else (230, 160, 60)
-                        pygame.draw.line(c, col, (x0 + a, y0 + b), (x0 + e, y0 + f))
+                        pygame.draw.line(c, col, (x0 + a, y0 + b), (x0 + e, y0 + f), 3)
         px, py = ox + w.x * cell + cell // 2, oy + w.y * cell + cell // 2
-        pygame.draw.circle(c, (255, 255, 85), (px, py), 2)
-        pygame.draw.line(c, (255, 80, 80), (px, py), (px + DX[w.facing] * 3, py + DY[w.facing] * 3))
+        pygame.draw.circle(c, (255, 255, 85), (px, py), cell // 4)
+        pygame.draw.line(c, (255, 80, 80), (px, py),
+                         (px + DX[w.facing] * cell // 2, py + DY[w.facing] * cell // 2), 4)
+        info = '%d,%d facing %s' % (w.x, w.y, 'NORTH EAST SOUTH WEST'.split()[w.facing // 2])
+        t = self.small.render(info, True, DIM)
+        c.blit(t, (MAP.x, MAP.bottom + 24))
+        hint = self.small.render('arrows move, L search', True, DIM)
+        c.blit(hint, (MAP.x, MAP.bottom + 24 + 36))
 
     def _draw_roster(self):
-        s = self.scale
-        x, y = (ROSTER.x + 2) * s, (ROSTER.y + 1) * s
-        self.screen.blit(self.small.render('NAME', True, DIM), (x, y))
-        self.screen.blit(self.small.render('AC', True, DIM), (x + 112 * s, y))
-        self.screen.blit(self.small.render('HP', True, DIM), (x + 132 * s, y))
-        self.screen.blit(self.small.render('EXP', True, DIM), (x + 168 * s, y))
+        c = self.screen
+        x, y = ROSTER.x + 20, ROSTER.y + 16
+        cols = (0, 430, 530, 690)
+        for col, head in zip(cols, ('NAME', 'AC', 'HP', 'EXP')):
+            c.blit(self.small.render(head, True, DIM), (x + col, y))
         for n, ch in enumerate(self.world.party[:8]):
-            yy = y + (9 + n * 9) * s
-            col = HILITE if n == self.world.selected else TEXT
+            yy = y + 48 + n * 60
+            colr = HILITE if n == self.world.selected else TEXT
             if ch.dead or ch.hp <= 0:
-                col = (240, 100, 90)
-            self.screen.blit(self.font.render(ch.name[:15], True, col), (x, yy))
-            self.screen.blit(self.font.render(str(ch.ac), True, col), (x + 112 * s, yy))
-            hp = 'DEAD' if ch.dead else str(ch.hp)
-            self.screen.blit(self.font.render(hp, True, col), (x + 132 * s, yy))
-            self.screen.blit(self.font.render(str(ch.experience), True, col), (x + 168 * s, yy))
-        w = self.world
-        if w.geo:
-            info = '%d,%d %s' % (w.x, w.y, 'N E S W'.split()[w.facing // 2])
-            self.screen.blit(self.small.render(info, True, DIM), (x, (ROSTER.bottom - 8) * s))
+                colr = (240, 100, 90)
+            hp = 'DEAD' if ch.dead else '%d/%d' % (ch.hp, ch.hp_max)
+            for col, val in zip(cols, (ch.name[:16], str(ch.ac), hp, str(ch.experience))):
+                c.blit(self.font.render(val, True, colr), (x + col, yy))
 
     def _wrap(self, text, width):
         words, out, line = text.split(' '), [], ''
@@ -355,39 +411,39 @@ class App:
         return out
 
     def _draw_text(self, top):
-        s = self.scale
-        width = 300 * s
+        c = self.screen
+        left, width = VIEW.x + 20, W - 2 * VIEW.x - 40
         rows = []
         for ln in self.lines + ([self.para.strip()] if self.para.strip() else []):
             rows += self._wrap(ln, width)
-        lh = 10 * s
-        avail = (192 - top) * s // lh - (2 if self.menu else 0)
-        rows = rows[-max(avail, 1):]
-        y = top * s + 2 * s
+        bottom = TEXT_BOTTOM - 12
+        menu_h = LINE + 8 if self.menu and self.menu[1] else 0
+        avail = max(1, (bottom - top - 12 - menu_h) // LINE - (len(self.menu[0]) if self.menu and not self.menu[1] else 0))
+        rows = rows[-avail:]
+        y = top + 12
         for r in rows:
-            self.screen.blit(self.font.render(r, True, TEXT), (10 * s, y))
-            y += lh
+            c.blit(self.font.render(r, True, TEXT), (left, y))
+            y += LINE
         self.menu_rects = []
         if self.menu:
             items, horiz = self.menu
             if horiz:
-                x, y = 10 * s, (192 - 11) * s
+                x, y = left, bottom - LINE
                 for n, it in enumerate(items):
-                    surf = self.font.render(it, True, (0, 0, 0) if n == self.sel else HILITE,
+                    surf = self.font.render(' %s ' % it, True, (0, 0, 0) if n == self.sel else HILITE,
                                             HILITE if n == self.sel else None)
-                    if x + surf.get_width() > W * s - 8 * s:
-                        x, y = 10 * s, y - lh
-                    self.screen.blit(surf, (x, y))
+                    if x + surf.get_width() > left + width:
+                        x, y = left, y - LINE
+                    c.blit(surf, (x, y))
                     self.menu_rects.append(pygame.Rect(x, y, surf.get_width(), surf.get_height()))
-                    x += surf.get_width() + 12 * s
+                    x += surf.get_width() + 32
             else:
-                y = top * s + 2 * s + len(rows) * lh
                 for n, it in enumerate(items):
-                    surf = self.font.render(it, True, (0, 0, 0) if n == self.sel else HILITE,
+                    surf = self.font.render(' %s ' % it, True, (0, 0, 0) if n == self.sel else HILITE,
                                             HILITE if n == self.sel else None)
-                    self.screen.blit(surf, (14 * s, y))
-                    self.menu_rects.append(pygame.Rect(14 * s, y, surf.get_width(), surf.get_height()))
-                    y += lh
+                    c.blit(surf, (left + 24, y))
+                    self.menu_rects.append(pygame.Rect(left + 24, y, surf.get_width(), surf.get_height()))
+                    y += LINE
 
     # ------------------------------------------------------------------ loop
     def run(self, max_frames=None, script=None):
@@ -400,7 +456,10 @@ class App:
                 elif ev.type == pygame.KEYDOWN:
                     self.key(ev)
                 elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                    self.click(ev.pos)
+                    self.click(self.to_frame(ev.pos))
+                elif ev.type == pygame.VIDEORESIZE and not self.fullscreen:
+                    self.window_size = ev.size
+                    self.window = self.open_window()
             if script and frames in script:
                 script[frames](self)
             if self.combat is not None:
