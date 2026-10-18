@@ -144,6 +144,7 @@ class WallSlots:
         self.walls = [None, None, None]
         self.shift = [0, 0, 0]
         self.ids = [None, None, None]
+        self.source = [None, None, None]   # (walldef id, part) shown in each slot
 
     def load(self, slot, block_id):
         from .geo import load_walldef
@@ -155,6 +156,7 @@ class WallSlots:
             if 1 <= s <= 3:
                 self.walls[s - 1] = ws
                 self.shift[s - 1] = shift
+                self.source[s - 1] = (block_id, k)
                 tid = block_id * 10 + k + 1 if len(sets) > 1 else block_id
                 pic = decode_block(self.symbols.get(tid)) if tid in self.symbols else None
                 self.sets[s] = pic.frames if pic else None

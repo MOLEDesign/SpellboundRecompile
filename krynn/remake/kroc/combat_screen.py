@@ -1,0 +1,392 @@
+"""Overhead combat screen.
+
+Keys on your turn:
+    arrows / numpad / WASD + QEZC     move (QEZC and numpad 7 9 1 3 diagonally)
+    moving into an enemy              attack it
+    mouse: click a lit cell / enemy   walk there / attack it
+    T                                 cycle the target shown in the panel
+    RETURN or X                       attack the target (if next to you)
+    B                                 bandage a dying friend next to you
+    G or SPACE                        end the turn (guard)
+    U                                 let the computer play this character
+    shift+U                           ... the whole party (U again to take back)
+    F                                 flee (from the edge of the field)
+    V                                 zoom in/out
+"""
+import time
+
+import pygame
+
+from .art import Art
+from .combat import ENEMY, PARTY, OK, DYING, DEAD, FLED
+
+DIRS = {
+    pygame.K_UP: (0, -1), pygame.K_w: (0, -1), pygame.K_KP8: (0, -1),
+    pygame.K_DOWN: (0, 1), pygame.K_s: (0, 1), pygame.K_KP2: (0, 1),
+    pygame.K_LEFT: (-1, 0), pygame.K_a: (-1, 0), pygame.K_KP4: (-1, 0),
+    pygame.K_RIGHT: (1, 0), pygame.K_d: (1, 0), pygame.K_KP6: (1, 0),
+    pygame.K_q: (-1, -1), pygame.K_KP7: (-1, -1), pygame.K_e: (1, -1), pygame.K_KP9: (1, -1),
+    pygame.K_z: (-1, 1), pygame.K_KP1: (-1, 1), pygame.K_c: (1, 1), pygame.K_KP3: (1, 1),
+}
+
+BG = (12, 12, 24)
+PANEL = (24, 24, 48)
+FRAME = (170, 120, 40)
+TEXT = (235, 235, 235)
+DIM = (150, 150, 170)
+GOOD = (120, 220, 120)
+BAD = (240, 100, 90)
+HILITE = (255, 255, 85)
+STEP_DELAY = 0.12
+ATTACK_DELAY = 0.45
+
+
+class CombatScreen:
+    def __init__(self, app, battle):
+        self.app = app
+        self.b = battle
+        self.s = app.scale
+        self.font = app.font
+        self.small = app.small
+        self.art = Art(app.world, app.small)
+        self.zoom = 2               # V toggles the whole-field view
+        self.ai = None
+        self.next_ai = 0
+        self.effects = []           # (until, kind, cell, text)
+        self.flash = {}             # combatant -> until (attack pose)
+        self.target = None
+        self.done = False
+        self.summary = None
+        self.reach = {}
+        self.auto_all = False
+        self.hover = None
+        self.begin_turn()
+
+    # --------------------------------------------------------------- turn flow
+    @property
+    def cur(self):
+        return self.b.turn
+
+    def begin_turn(self):
+        c = self.b.next_turn()
+        if c is None:
+            self.finish()
+            return
+        if c.side == ENEMY or c.auto or self.auto_all:
+            self.ai = self.b.ai_turn(c)
+            self.next_ai = time.time() + 0.25
+        else:
+            self.ai = None
+            self.refresh()
+
+    def refresh(self):
+        c = self.cur
+        self.reach = self.b.reachable(c) if c and not c.attacked else {}
+        foes = self.b.foes(c) if c else []
+        if self.target not in foes:
+            self.target = min(foes, key=lambda f: self.b.distance(c, f)) if foes else None
+        if c and c.side == PARTY and (c.attacked or (c.half_moves < 2 and not any(self.b.adjacent(c, f) for f in foes))):
+            self.end_turn()
+
+    def end_turn(self):
+        if self.b.turn is not None:
+            self.b.turn.guarding = not self.b.turn.attacked
+        self.begin_turn()
+
+    def finish(self):
+        if self.summary is not None:
+            return
+        each = self.b.finish()
+        r = self.b.result
+        if r == 'won':
+            self.summary = ['VICTORY!', 'Each survivor gains %d experience.' % each]
+        elif r == 'fled':
+            self.summary = ['The party escapes.']
+        else:
+            self.summary = ['The party has fallen...']
+        self.summary.append('Press RETURN to continue.')
+
+    def update(self):
+        if self.summary is not None or not self.ai:
+            return
+        if time.time() < self.next_ai:
+            return
+        try:
+            kind, what = next(self.ai)
+        except StopIteration:
+            self.ai = None
+            self.end_turn()
+            return
+        if kind == 'attack':
+            self.flash[self.cur] = time.time() + ATTACK_DELAY
+            self.next_ai = time.time() + ATTACK_DELAY
+        else:
+            self.next_ai = time.time() + STEP_DELAY
+        if self.b.check_end():
+            self.ai = None
+            self.finish()
+
+    # --------------------------------------------------------------- input
+    def key(self, ev):
+        if self.summary is not None:
+            if ev.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                self.done = True
+            return
+        if ev.key == pygame.K_v:
+            self.zoom = 1 if self.zoom == 2 else 2
+            return
+        c = self.cur
+        if ev.key == pygame.K_u:
+            if ev.mod & pygame.KMOD_SHIFT:
+                self.auto_all = not self.auto_all
+                if not self.auto_all:
+                    for p in self.b.party:
+                        p.auto = False
+            elif c is not None and c.side == PARTY:
+                c.auto = not c.auto
+            if c is not None and c.side == PARTY and (c.auto or self.auto_all) and self.ai is None:
+                self.ai = self.b.ai_turn(c)
+            return
+        if self.ai is not None or c is None or c.side != PARTY:
+            return
+        if ev.key in DIRS:
+            dx, dy = DIRS[ev.key]
+            self.move_or_attack(dx, dy)
+        elif ev.key == pygame.K_t:
+            foes = sorted(self.b.foes(c), key=lambda f: self.b.distance(c, f))
+            if foes:
+                i = foes.index(self.target) if self.target in foes else -1
+                self.target = foes[(i + 1) % len(foes)]
+        elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) or ev.unicode.lower() == 'x':
+            self.attack(self.target)
+        elif ev.key == pygame.K_b:
+            for p in self.b.party:
+                if p.status == DYING and self.b.bandage(c, p):
+                    self.refresh()
+                    break
+        elif ev.key in (pygame.K_g, pygame.K_SPACE):
+            self.end_turn()
+        elif ev.key == pygame.K_f:
+            if self.b.arena.edge(c.x, c.y):
+                self.b.flee(c)
+                self.end_turn()
+            else:
+                self.b.log('Move to the edge of the field to flee.')
+
+    def move_or_attack(self, dx, dy):
+        c = self.cur
+        o = None
+        for cx, cy in c.cells(c.x + dx, c.y + dy):
+            o = o or self.b.occupant(cx, cy, ignore=c)
+        if o is not None and o.side != c.side and o.active:
+            self.attack(o)
+            return
+        if self.b.step(c, dx, dy):
+            if c.status == FLED:
+                self.end_turn()
+                return
+            if not c.active:
+                self.end_turn()
+                return
+            self.refresh()
+
+    def attack(self, t):
+        c = self.cur
+        if t is None or not self.b.adjacent(c, t) or c.attacked:
+            if t is not None:
+                self.b.log('%s is out of reach.' % t.name)
+            return
+        self.flash[c] = time.time() + ATTACK_DELAY
+        self.b.attack(c, t)
+        if self.b.check_end():
+            self.finish()
+            return
+        self.refresh()
+
+    def click(self, pos):
+        if self.summary is not None:
+            self.done = True
+            return
+        c = self.cur
+        if c is None or c.side != PARTY or self.ai is not None:
+            return
+        cell = self.cell_at(pos)
+        if cell is None:
+            return
+        o = self.b.occupant(*cell)
+        if o is not None and o.side != c.side and o.active:
+            self.target = o
+            if self.b.adjacent(c, o):
+                self.attack(o)
+            return
+        path = self.b.path_to(c, cell)
+        for p in path or []:
+            if not self.b.step(c, p[0] - c.x, p[1] - c.y) or not c.active:
+                break
+        if c.active:
+            self.refresh()
+        else:
+            self.end_turn()
+
+    # --------------------------------------------------------------- geometry
+    def cell_px(self):
+        return 8 * self.s * self.zoom
+
+    def view_rect(self):
+        s = self.s
+        return pygame.Rect(4 * s, 4 * s, 232 * s, 168 * s)
+
+    def camera(self):
+        """Top-left cell shown, keeping the active combatant in view."""
+        v, cp = self.view_rect(), self.cell_px()
+        cols, rows = v.w // cp, v.h // cp
+        a = self.b.arena
+        focus = self.cur or self.b.party[0]
+        cx = min(max(0, focus.x - cols // 2), max(0, a.w - cols))
+        cy = min(max(0, focus.y - rows // 2), max(0, a.h - rows))
+        return cx, cy
+
+    def cell_at(self, pos):
+        v, cp = self.view_rect(), self.cell_px()
+        if not v.collidepoint(pos):
+            return None
+        cx, cy = self.camera()
+        x, y = (pos[0] - v.x) // cp + cx, (pos[1] - v.y) // cp + cy
+        return (x, y) if self.b.arena.inside(x, y) else None
+
+    def to_px(self, x, y):
+        v, cp = self.view_rect(), self.cell_px()
+        cx, cy = self.camera()
+        return v.x + (x - cx) * cp, v.y + (y - cy) * cp
+
+    # --------------------------------------------------------------- drawing
+    def draw(self, screen):
+        screen.fill(BG)
+        v, cp = self.view_rect(), self.cell_px()
+        a = self.b.arena
+        screen.set_clip(v)
+        cx, cy = self.camera()
+        cols, rows = v.w // cp + 1, v.h // cp + 1
+        threat = self.b.threatened(PARTY) if self.cur and self.cur.side == PARTY else set()
+        for y in range(cy, min(a.h, cy + rows)):
+            for x in range(cx, min(a.w, cx + cols)):
+                px, py = self.to_px(x, y)
+                screen.blit(self.art.block(a.floor[y][x], cp), (px, py))
+                bid = a.block[y][x]
+                if bid is not None:
+                    screen.blit(self.art.block(bid, cp, a.doors.get((x, y))), (px, py))
+        # overlays for the active party member
+        if self.cur and self.cur.side == PARTY and self.ai is None:
+            ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            for (x, y), (cost, _) in self.reach.items():
+                if (x, y) == (self.cur.x, self.cur.y):
+                    continue
+                ov.fill((80, 160, 255, 32) if (x, y) not in threat else (255, 120, 60, 64))
+                screen.blit(ov, self.to_px(x, y))
+        # combatants
+        now = time.time()
+        for c in sorted(self.b.all, key=lambda c: (c.status == OK, c.y)):
+            if c.status == FLED:
+                continue
+            px, py = self.to_px(c.x, c.y)
+            w, h = c.w * cp, c.h * cp
+            if c.status == DEAD:
+                if c.side == PARTY:
+                    pygame.draw.line(screen, BAD, (px + 4, py + 4), (px + cp - 4, py + cp - 4), 2)
+                    pygame.draw.line(screen, BAD, (px + cp - 4, py + 4), (px + 4, py + cp - 4), 2)
+                continue
+            icon = self.icon(c, self.flash.get(c, 0) > now)
+            if icon is not None:
+                icon = pygame.transform.scale(icon, (w, h))
+                if c.status == DYING:
+                    icon = pygame.transform.rotate(icon, 90)
+                screen.blit(icon, (px, py))
+            else:
+                pygame.draw.rect(screen, GOOD if c.side == PARTY else BAD, (px + 2, py + 2, w - 4, h - 4))
+            # health bar
+            frac = max(0, c.hp) / float(max(1, c.hp_max))
+            pygame.draw.rect(screen, (0, 0, 0), (px + 2, py + h - 4, w - 4, 3))
+            pygame.draw.rect(screen, GOOD if frac > 0.5 else (HILITE if frac > 0.25 else BAD),
+                             (px + 2, py + h - 4, int((w - 4) * frac), 3))
+            if c is self.cur:
+                pulse = 2 + int(now * 4) % 2
+                pygame.draw.rect(screen, HILITE, (px, py, w, h), pulse)
+            elif c is self.target and self.cur and self.cur.side == PARTY:
+                pygame.draw.rect(screen, BAD, (px, py, w, h), 2)
+        screen.set_clip(None)
+        pygame.draw.rect(screen, FRAME, v.inflate(4, 4), 2)
+        self.draw_panel(screen)
+        self.draw_log(screen)
+        if self.summary is not None:
+            self.draw_summary(screen)
+
+    def icon(self, c, attacking):
+        kind = c.icon[0]
+        if kind == 'party':
+            return self.art.party_icon(c.icon[1])
+        return self.art.monster_icon(c.icon[1], attacking, c.icon[2])
+
+    def draw_panel(self, screen):
+        s = self.s
+        r = pygame.Rect(240 * s, 4 * s, 76 * s, 168 * s)
+        pygame.draw.rect(screen, PANEL, r)
+        pygame.draw.rect(screen, FRAME, r, 2)
+        y = r.y + 3 * s
+        x = r.x + 3 * s
+        c = self.cur
+        title = 'ROUND %d' % self.b.round
+        screen.blit(self.small.render(title, True, DIM), (x, y))
+        y += 9 * s
+        for p in self.b.party:
+            col = TEXT if p.status == OK else (BAD if p.status in (DYING, DEAD) else DIM)
+            if p is c:
+                col = HILITE
+            screen.blit(self.small.render(p.name[:13], True, col), (x, y))
+            y += 7 * s
+            st = {OK: '', DYING: ' DYING', DEAD: ' DEAD', FLED: ' FLED'}[p.status]
+            screen.blit(self.small.render('HP %d/%d AC %d%s' % (p.hp, p.hp_max, p.ac, st), True, DIM),
+                        (x + 4 * s, y))
+            y += 8 * s
+        y += 2 * s
+        if c is not None:
+            who = c.name if c.side == PARTY else c.name + ' (enemy)'
+            screen.blit(self.small.render('TURN: ' + who[:16], True, HILITE), (x, y))
+            y += 8 * s
+            if c.side == PARTY:
+                screen.blit(self.small.render('Moves left %d' % (c.half_moves // 2), True, DIM), (x, y))
+                y += 8 * s
+        t = self.target
+        if t is not None and t.active and c is not None and c.side == PARTY:
+            screen.blit(self.small.render('TARGET: ' + t.name[:14], True, BAD), (x, y))
+            y += 7 * s
+            pct = int(round(self.b.to_hit(c, t) * 100))
+            screen.blit(self.small.render('HP %d/%d AC %d' % (t.hp, t.hp_max, t.ac), True, DIM), (x, y))
+            y += 7 * s
+            dmg = ' '.join(a.text() for a in c.attacks)
+            screen.blit(self.small.render('Hit %d%%  dmg %s' % (pct, dmg), True, DIM), (x, y))
+            y += 7 * s
+            screen.blit(self.small.render('in reach' if self.b.adjacent(c, t) else
+                                          '%d cells away' % self.b.distance(c, t), True, DIM), (x, y))
+
+    def draw_log(self, screen):
+        s = self.s
+        r = pygame.Rect(4 * s, 176 * s, 312 * s, 22 * s)
+        pygame.draw.rect(screen, PANEL, r)
+        lines = self.b.log_lines[-2:]
+        y = r.y + 1 * s
+        for ln in lines:
+            screen.blit(self.small.render(ln, True, TEXT), (r.x + 3 * s, y))
+            y += 7 * s
+        help_ = ('move: arrows/QEZC  bump or click: attack  T target  B bandage  '
+                 'SPACE end turn  U auto  F flee  V zoom')
+        screen.blit(self.small.render(help_, True, DIM), (r.x + 3 * s, r.bottom - 7 * s))
+
+    def draw_summary(self, screen):
+        s = self.s
+        r = pygame.Rect(60 * s, 60 * s, 200 * s, 60 * s)
+        pygame.draw.rect(screen, (40, 0, 0) if self.b.result == 'lost' else (0, 30, 10), r)
+        pygame.draw.rect(screen, FRAME, r, 2)
+        y = r.y + 6 * s
+        for i, ln in enumerate(self.summary):
+            screen.blit(self.font.render(ln, True, HILITE if i == 0 else TEXT), (r.x + 8 * s, y))
+            y += 11 * s

@@ -7,6 +7,8 @@ import pygame
 from cok import gfx, view3d
 from cok.geo import DX, DY
 
+from . import encounter
+from .combat_screen import CombatScreen
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 SCALE = 3
@@ -77,7 +79,7 @@ class App:
         self.sel = 0
         self.picture = None         # (Picture, kind)
         self.sprite = None          # (Picture, distance)
-        self.combat = None
+        self.combat = None          # CombatScreen while fighting
         self.wait_until = 0
         self.show_map = False
         self.visited = set()
@@ -146,9 +148,10 @@ class App:
                 self.wait_until = time.time() + 0.6
             elif k == 'combat':
                 self.flush()
-                self.combat = req[1]
+                self.combat = CombatScreen(self, encounter.build(self.world, req[1], self.world.vm.rng))
             elif k == 'program':
                 if req[1] == 9:
+                    self.world.rest()
                     self.add_text('The party rests and recovers.', False)
                     self.flush()
             elif k == 'treasure':
@@ -180,17 +183,15 @@ class App:
 
     # ------------------------------------------------------------------ input
     def key(self, ev):
-        if ev.key == pygame.K_ESCAPE and not self.menu:
-            self.running = False
-            return
         if ev.key == pygame.K_F11:
             pygame.display.toggle_fullscreen()
             return
         if self.combat is not None:
-            if ev.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
-                self.combat = None
-                self.answer = True
-                self.pump()
+            self.combat.key(ev)
+            self.end_combat_if_done()
+            return
+        if ev.key == pygame.K_ESCAPE and not self.menu:
+            self.running = False
             return
         if self.menu:
             items, horiz = self.menu
@@ -214,6 +215,22 @@ class App:
         if ev.key in KEYS:
             self.act(KEYS[ev.key])
 
+    def end_combat_if_done(self):
+        if self.combat is not None and self.combat.done:
+            result = self.combat.b.result
+            self.combat = None
+            if result == 'lost':
+                # the party is dead: back to the start, as the original does
+                self.world = World(files=self.world.files, log=self.log)
+                self.lines, self.para, self.picture, self.sprite = [], '', None, None
+                self.add_text('The party has perished. A new band gathers at the Inn...', True)
+                self.flush()
+                self.gen = self.world.start()
+                self.answer = None
+            else:
+                self.answer = result == 'won'
+            self.pump()
+
     def click(self, pos):
         if self.menu:
             for n, r in enumerate(self.menu_rects):
@@ -221,12 +238,15 @@ class App:
                     self.choose(n)
                     return
         elif self.combat is not None:
-            self.combat = None
-            self.answer = True
-            self.pump()
+            self.combat.click(pos)
+            self.end_combat_if_done()
 
     # ------------------------------------------------------------------ drawing
     def draw(self):
+        if self.combat is not None:
+            self.combat.draw(self.screen)
+            pygame.display.flip()
+            return
         c = self.canvas
         c.fill(BG)
         w = self.world
@@ -251,8 +271,6 @@ class App:
         if not (big or overland):
             self._draw_roster()
         self._draw_text(text_top)
-        if self.combat is not None:
-            self._draw_combat()
         pygame.display.flip()
 
     def _frame(self, p):
@@ -305,12 +323,19 @@ class App:
         s = self.scale
         x, y = (ROSTER.x + 2) * s, (ROSTER.y + 1) * s
         self.screen.blit(self.small.render('NAME', True, DIM), (x, y))
-        self.screen.blit(self.small.render('EXP', True, DIM), (x + 150 * s, y))
+        self.screen.blit(self.small.render('AC', True, DIM), (x + 112 * s, y))
+        self.screen.blit(self.small.render('HP', True, DIM), (x + 132 * s, y))
+        self.screen.blit(self.small.render('EXP', True, DIM), (x + 168 * s, y))
         for n, ch in enumerate(self.world.party[:8]):
             yy = y + (9 + n * 9) * s
             col = HILITE if n == self.world.selected else TEXT
+            if ch.dead or ch.hp <= 0:
+                col = (240, 100, 90)
             self.screen.blit(self.font.render(ch.name[:15], True, col), (x, yy))
-            self.screen.blit(self.font.render(str(ch.experience), True, col), (x + 150 * s, yy))
+            self.screen.blit(self.font.render(str(ch.ac), True, col), (x + 112 * s, yy))
+            hp = 'DEAD' if ch.dead else str(ch.hp)
+            self.screen.blit(self.font.render(hp, True, col), (x + 132 * s, yy))
+            self.screen.blit(self.font.render(str(ch.experience), True, col), (x + 168 * s, yy))
         w = self.world
         if w.geo:
             info = '%d,%d %s' % (w.x, w.y, 'N E S W'.split()[w.facing // 2])
@@ -364,17 +389,6 @@ class App:
                     self.menu_rects.append(pygame.Rect(14 * s, y, surf.get_width(), surf.get_height()))
                     y += lh
 
-    def _draw_combat(self):
-        s = self.scale
-        r = pygame.Rect(40 * s, 30 * s, 240 * s, 120 * s)
-        pygame.draw.rect(self.screen, (40, 0, 0), r)
-        pygame.draw.rect(self.screen, FRAME, r, s)
-        y = r.y + 6 * s
-        for txt in ['COMBAT!'] + ['%d x %s' % (cnt, self.world.monster_name(mid)) for mid, cnt, _ in self.combat] + \
-                ['', 'Tactical combat is not rebuilt yet.', 'Press RETURN: the party wins.']:
-            self.screen.blit(self.font.render(txt, True, HILITE if txt == 'COMBAT!' else TEXT), (r.x + 8 * s, y))
-            y += 10 * s
-
     # ------------------------------------------------------------------ loop
     def run(self, max_frames=None, script=None):
         frames = 0
@@ -389,6 +403,9 @@ class App:
                     self.click(ev.pos)
             if script and frames in script:
                 script[frames](self)
+            if self.combat is not None:
+                self.combat.update()
+                self.end_combat_if_done()
             self.pump()
             self.draw()
             self.clock.tick(30)

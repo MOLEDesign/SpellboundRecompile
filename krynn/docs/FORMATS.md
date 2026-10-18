@@ -86,6 +86,45 @@ Solace..."). Block `0x10` is the overland map, a 38x15 grid over big
 picture `0x79`, with a place table at `0x8E72`. Block `0x11` is the first
 outpost, and `0x20` is Throtl.
 
+## Monsters, characters and combat graphics
+
+Monster records (`MONnCHA.DAX`, 409 bytes, id = monster number):
+
+| offset | field |
+|--------|-------|
+| 0x00 | name (length byte + 15 chars) |
+| 0x10 | six stat pairs (current, maximum) |
+| 0x59 | 60 - THAC0 |
+| 0x62 | hit points |
+| 0xD0 | five saving throws |
+| 0xD5 | movement (flying speeds included) |
+| 0xD6 | hit dice |
+| 0x10B/0x10C | half-attacks per round of attack groups 1 and 2 |
+| 0x10D/0x10E | damage dice count, 0x10F/0x110 dice size, 0x111/0x112 bonus |
+| 0x113 | 60 - AC |
+| 0x130 | experience value (u16 LE) |
+
+For example, black dragon: 1d4/1d4 claws (4 half-attacks), 3d6 bite, AC 3.
+
+Party records (`save/CHRDATAn.SAV`, 426 bytes) use a shifted layout:
+0x00 name, 0x10 stats, 0x64 maximum HP, 0x141-0x14B combat icon (head,
+body, slot, size 1 small / 2 normal, six colour bytes), 0x19B 60 - THAC0
+with bonuses, 0x19C 60 - AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
+0x1A8 current HP, 0x1A9 movement.
+
+Combat icons: monster id `n` in `CPICn.DAA` is the ready pose and `n|0x80`
+is the attack pose. They are 24x24, or 48x24 / 24x48 for big monsters.
+Party icons are built from `charT.LBM` (`charS.LBM` for small races), a
+sheet of 24x24 cells 13 to a row: body cell = icon body byte, head cell =
+67 + head byte. Template colours 1, 2, 3, 4, 6, 7 (and +8) are replaced by
+the six colour bytes (low and high nibble). Colour 16 is the background.
+
+Combat tiles: `DUNGCOM`, `WILDCOM` and `RANDCOM` hold 24x24 tiles as
+5-plane pictures with a palette and 2 padding bytes. The original lays
+the 13x5 map squares around the party into a skewed 50x25 grid, which is
+the fake isometric view. The remake draws the same area straight from
+above (`remake/kroc/combat.py`).
+
 ## Executable
 
 `game` is a hunk file of 101 code hunks compiled from Pascal. Each unit

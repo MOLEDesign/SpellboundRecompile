@@ -64,6 +64,12 @@ def test_geo(gf):
 
 def test_story_reaches_throtl(gf):
     """New game -> leave the outpost -> walk to Throtl -> first steps inside."""
+    w = _throtl_world(gf)
+    assert w.vm.block_id == 0x20 and w.in_dungeon and w.geo_id == 0x20, (w.vm.block_id, w.geo_id)
+    assert (w.x, w.y) == (7, 13), (w.x, w.y)
+
+
+def _throtl_world(gf):
     from kroc.world import World, Files
     w = World(files=Files(gf.source))
     w.vm.rng.seed(1)
@@ -86,12 +92,50 @@ def test_story_reaches_throtl(gf):
                     ans = 0
             elif r[0] == 'combat':
                 ans = True
-        raise AssertionError('script did not finish')
     drive(w.start())
     for act in ('right', 'forward', 'forward', 'forward', 'forward'):
         drive(w.step(act))
-    assert w.vm.block_id == 0x20 and w.in_dungeon and w.geo_id == 0x20, (w.vm.block_id, w.geo_id)
-    assert (w.x, w.y) == (7, 13), (w.x, w.y)
+    return w
+
+
+def _fight(battle):
+    """Let the AI play both sides to the end; check the board stays legal."""
+    for _ in range(5000):
+        c = battle.next_turn()
+        if c is None:
+            break
+        for _ in battle.ai_turn(c):
+            cells = [p for x in battle.all if x.present and x.status != 'fled' for p in x.cells()]
+            assert len(cells) == len(set(cells)), 'two combatants share a cell'
+            assert all(battle.arena.passable(*p) for p in cells), 'combatant inside a wall'
+    assert battle.result in ('won', 'lost', 'fled'), battle.result
+    return battle.result
+
+
+def test_combat_outdoors(gf):
+    import random
+    from kroc import encounter
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    w.files.area = '2'
+    b = encounter.build(w, [(1, 4, 1)], random.Random(2))       # the caravan's 4 Baaz
+    assert [e.name for e in b.enemies] == ['BAAZ'] * 4
+    assert b.enemies[0].ac == 4 and b.enemies[0].thac0 == 16 and b.enemies[0].attacks[0].text() == '1d8'
+    assert _fight(b) in ('won', 'lost')
+
+
+def test_combat_dungeon(gf):
+    import random
+    from cok import blocks
+    from kroc import encounter
+    w = _throtl_world(gf)
+    b = encounter.build(w, [(9, 5, 9)], random.Random(3))       # goblins in Throtl
+    ids = {bid for row in b.arena.block for bid in row if bid}
+    assert any(i.startswith('W1-') for i in ids), ids
+    assert all(blocks.parse(i)['kind'] in ('wall', 'door', 'edge') for i in ids), ids
+    big = [e for e in encounter.build(w, [(0x10, 1, 0)], random.Random(1)).enemies]
+    assert big and (big[0].w, big[0].h) == (1, 2), 'minotaur icon is 24x48'
+    _fight(b)
 
 
 def main():

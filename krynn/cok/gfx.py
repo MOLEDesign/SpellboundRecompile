@@ -91,7 +91,8 @@ def decode_block(data):
     rb += rb & 1
     body = len(data) - 9
     palette = None
-    if (body - 64) > 0 and (body - 64) % (rb * h) == 0 and (body - 64) // (rb * h) == 5:
+    # 5-plane pictures carry a palette; some blocks end with 2 padding bytes
+    if body - 64 >= 5 * rb * h and (body - 64) - 5 * rb * h < rb:
         palette = [amiga_rgb(struct.unpack_from('>H', data, 9 + 2 * i)[0]) for i in range(32)]
         planes, start = 5, 73
     else:

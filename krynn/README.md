@@ -22,6 +22,18 @@ it in Python, so its worst flaws can be fixed.
   animations, the overland map, monster sprites, and the first-person 3D
   view with the original walls. New: readable text, mouse support, and an
   automap of the squares you have visited (M).
+* **Overhead tactical combat**: the original's fake-isometric battlefield
+  is replaced by a straight top-down grid built from the map around the
+  party, or open ground outdoors. It uses the original combat icons and
+  tiles and the AD&D rules (initiative, THAC0/AC, damage dice, attacks of
+  opportunity, dying at 0 and dead at -10). Monsters and the party take
+  their stats from the game's own records. The screen shows how far you can
+  move, which squares are threatened, and your hit chance and damage.
+* **Replaceable combat blocks**: every wall, door, floor and obstacle has a
+  fixed id (`W1-01-03`, `D2-13-07`, `O-WILD-06`...). Drop
+  `remake/art/blocks/<ID>.png` in to redraw one; see
+  [remake/art/README.md](remake/art/README.md) and the list in
+  [remake/art/BLOCKS.md](remake/art/BLOCKS.md).
 
 ## What does not work yet
 
@@ -30,8 +42,10 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* tactical combat (a placeholder screen declares victory)
-* items, treasure, shops, training, spells, resting rules
+* spells, missile weapons and items in combat (melee only so far), morale
+  and monster fleeing
+* items, treasure, shops, training, spells, resting rules (an inn heals
+  everyone fully)
 * sound and music
 * saving and loading
 
@@ -53,6 +67,20 @@ python3 remake/krynn.py            # finds krynn/original/*.zip by itself
 | F11 | full screen |
 | ESC | quit |
 
+In combat:
+
+| key | action |
+|-----|--------|
+| arrows / WASD, Q E Z C (or numpad) | move, diagonals with Q E Z C |
+| move into an enemy, or click it | attack |
+| click a lit square | walk there |
+| T, RETURN | pick a target, attack it |
+| B | bandage a dying friend next to you |
+| SPACE / G | end the turn |
+| U / shift+U | the computer plays this character / the whole party (again to stop) |
+| F | flee from the edge of the field |
+| V | zoom out to the whole field |
+
 `python3 remake/play_text.py` plays the same scripts in the terminal.
 
 ## Tools
@@ -68,9 +96,10 @@ python3 tests/run_tests.py               # format and script checks against your
 ## Layout
 
 ```
-cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, gamefiles, png
-tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt)
-remake/         krynn.py (pygame), play_text.py, kroc/ (vm, world, app), fonts/
+cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl, blocks, gamefiles, png
+tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py
+remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
+remake/kroc/    vm, world, app, combat (rules), encounter, combat_screen, art
 docs/           FORMATS.md
 tests/          run_tests.py
 ```

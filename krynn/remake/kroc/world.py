@@ -26,9 +26,12 @@ class Files:
             self._c[name] = Container(self.gf.read(name), name) if name in self.gf else None
         return self._c[name]
 
-    def find(self, prefix, block_id, exts=('.dax', '.daa')):
+    def find(self, prefix, block_id, exts=('.dax', '.daa'), prefer=None):
         """Entry block_id from prefix1/prefix2 (e.g. ECL1.DAX/ECL2.DAX)."""
-        for area in ('1', '2', '0', ''):
+        areas = ('1', '2', '0', '')
+        if prefer:
+            areas = (prefer,) + tuple(a for a in areas if a != prefer)
+        for area in areas:
             for ext in exts:
                 c = self.container(prefix + area + ext)
                 if c is not None and block_id in c:
@@ -36,10 +39,30 @@ class Files:
         return None, None
 
     def ecl(self, block_id):
-        c, _ = self.find('ecl', block_id)
+        c, area = self.find('ecl', block_id)
         if c is None:
             raise KeyError('ECL block %02X not found' % block_id)
+        self.area = area            # monsters and icons come from the same disk
         return c.get(block_id)
+
+    def monster(self, mid, area=None):
+        """Raw monster record (MONnCHA.DAX) or None."""
+        c, _ = self.find('mon', mid, ('cha.dax',), prefer=area)
+        return c.get(mid) if c is not None else None
+
+    def combat_icon(self, mid, area=None):
+        """(ready, attack) pictures of a monster's combat icon."""
+        c, _ = self.find('cpic', mid, ('.daa',), prefer=area)
+        if c is None:
+            return None, None
+        ready = gfx.decode_block(c.get(mid))
+        attack = gfx.decode_block(c.get(mid | 0x80)) if (mid | 0x80) in c else ready
+        return ready, attack
+
+    def tiles(self, name):
+        """Combat tile set (DUNGCOM/WILDCOM/RANDCOM) as a Picture."""
+        c = self.container(name + '.daa')
+        return gfx.decode_block(c.get(c.ids()[0])) if c is not None else None
 
     def picture(self, pid):
         """Picture by ECL id: big pictures, then the animated 88x88 pics."""
@@ -54,15 +77,35 @@ class Files:
         return gfx.decode_anim(c.get(sid)) if c is not None else None
 
 
+def _s8(b):
+    return b - 256 if b > 127 else b
+
+
 class Character:
+    """A party member, from a CHRDATAn.SAV record (426 bytes).
+
+    Offsets worked out from the save disk's party: 0x00 name, 0x10 six stat
+    pairs (current, maximum), 0x1C exceptional strength, 0x5B race, 0x5C class,
+    0x64 maximum HP, 0x141-0x14B combat icon (head, body, slot, size, colours),
+    0x19B 60-THAC0, 0x19C 60-AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
+    0x1A8 current HP, 0x1A9 movement.
+    """
     STATS = ('STR', 'INT', 'WIS', 'DEX', 'CON', 'CHA')
 
     def __init__(self, name, raw=b''):
         self.name = name
         self.raw = raw
         self.experience = 0
-        # save files: 16-byte name, then current/maximum pairs of the six stats
-        self.stats = {s: raw[16 + 2 * k] for k, s in enumerate(self.STATS)} if len(raw) > 28 else {}
+        self.dead = False
+        r = raw if len(raw) >= 0x1AA else bytes(0x1AA)
+        self.stats = {s: r[16 + 2 * k] for k, s in enumerate(self.STATS)}
+        self.hp_max = r[0x64] or 8
+        self.hp = _s8(r[0x1A8]) if raw else self.hp_max
+        self.thac0 = 60 - r[0x19B] if r[0x19B] else 20
+        self.ac = 60 - r[0x19C] if r[0x19C] else 10
+        self.weapon = (r[0x1A0] or 1, r[0x1A2] or 4, _s8(r[0x1A5]))
+        self.move = r[0x1A9] or 12
+        self.icon = dict(head=r[0x141], body=r[0x142], size=r[0x144] or 2, colours=bytes(r[0x146:0x14C]))
 
 
 class World:
@@ -93,12 +136,8 @@ class World:
         return party or [Character('HERO')]
 
     def monster_name(self, mid):
-        for area in ('1', '2'):
-            c = self.files.container('mon%scha.dax' % area)
-            if c is not None and mid in c:
-                d = c.get(mid)
-                return d[1:1 + d[0]].decode('latin-1')
-        return 'MONSTER %d' % mid
+        d = self.files.monster(mid, getattr(self.files, 'area', None))
+        return d[1:1 + d[0]].decode('latin-1') if d else 'MONSTER %d' % mid
 
     def party_names(self):
         return [c.name for c in self.party]
@@ -118,6 +157,12 @@ class World:
         for c in self.party:
             c.experience += amount
         self.log('The party gains %d experience.' % amount)
+
+    def rest(self):
+        """A night at an inn: the living recover all their hit points."""
+        for c in self.party:
+            if not c.dead:
+                c.hp = c.hp_max
 
     def advance_clock(self, n):
         self.clock += n
@@ -143,10 +188,10 @@ class World:
             return
         self.geo = GeoMap(c.get(geo_id), geo_id)
         self.geo_id = geo_id
-        self.area = area
+        self.map_area = area
 
     def load_walls(self, a, b, c):
-        area = getattr(self, 'area', '1') or '1'
+        area = getattr(self, 'map_area', '1') or '1'
         wd = self.files.container('walldef%s.dax' % area)
         sym = self.files.container('8x8d%s.daa' % area)
         common = gfx.decode_block(self.files.container('8x8d0.daa').get(0xCB)).frames

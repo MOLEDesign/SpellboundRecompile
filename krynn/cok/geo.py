@@ -91,3 +91,23 @@ class WallSet:
 
 def load_walldef(data):
     return [WallSet(data[o:o + WallSet.SIZE]) for o in range(0, len(data) - WallSet.SIZE + 1, WallSet.SIZE)]
+
+
+def corridor(wall):
+    """A tiny map for reference pictures: from (1, 3) facing north, a corridor
+    whose side walls and end wall are all wall type `wall`."""
+    d = bytearray(0x400)
+
+    def setw(x, y, side, t):
+        i = y * 16 + x
+        if side in (N, E):
+            sh = 4 if side == N else 0
+            d[i] = (d[i] & ~(15 << sh)) | (t << sh)
+        else:
+            sh = 4 if side == S else 0
+            d[0x100 + i] = (d[0x100 + i] & ~(15 << sh)) | (t << sh)
+    for y in range(1, 4):
+        setw(1, y, W, wall)
+        setw(1, y, E, wall)
+    setw(1, 1, N, wall)
+    return GeoMap(bytes(2) + bytes(d))

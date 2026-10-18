@@ -13,6 +13,7 @@ installed files (default: looked up in krynn/original/). Writes:
     maps/             GEO maps as ASCII and PNG
     ecl/              ECL event scripts, disassembled
     lbm/              the IFF title screens and character icons
+    blocks/           one reference picture per combat block id + index.md
     krynn.asm         annotated 68000 disassembly of "game" (needs capstone)
 """
 import argparse
@@ -26,7 +27,7 @@ from cok import gfx, view3d  # noqa: E402
 from cok.dax import Container  # noqa: E402
 from cok.ecl import EclBlock  # noqa: E402
 from cok.gamefiles import GameFiles  # noqa: E402
-from cok.geo import GeoMap, load_walldef  # noqa: E402
+from cok.geo import GeoMap, corridor, load_walldef  # noqa: E402
 from cok.ilbm import ILBM  # noqa: E402
 from cok.png import write_png  # noqa: E402
 
@@ -111,9 +112,13 @@ def main():
             imgs = []
             for k, ws in enumerate(load_walldef(wd.get(wid))):
                 for style in range(5):
-                    geo = _corridor(k * 5 + style + 1)
+                    geo = corridor(k * 5 + style + 1)
                     imgs.append((88, 88, view3d.Renderer().render(geo, 1, 3, 0, slots)))
             sheet(os.path.join(out, 'walls', 'walldef%s_%02X.png' % (area, wid)), imgs, pal, cols=5, scale=2)
+
+    # combat block ids: a reference picture for each ---------------------------
+    _blocks(gf, os.path.join(out, 'blocks'))
+    print('blocks done')
 
     # maps -------------------------------------------------------------------
     for gname, gc in containers(gf, ('.dax',)):
@@ -153,25 +158,43 @@ def main():
     print('done ->', os.path.abspath(out))
 
 
-def _corridor(wall):
-    """A tiny map: a corridor with a wall of the given type ahead and at the sides."""
-    raw = bytearray(0x402)
-    d = raw[2:]
-
-    def setw(x, y, side, t):
-        i = y * 16 + x
-        if side in (0, 2):
-            sh = 4 if side == 0 else 0
-            d[i] = (d[i] & ~(15 << sh)) | (t << sh)
+def _blocks(gf, out):
+    from cok import blocks
+    os.makedirs(out, exist_ok=True)
+    pal = gfx.EGA * 2
+    common = gfx.decode_block(Container(gf.read('8x8d0.daa'), '8x8d0.daa').get(0xCB)).frames
+    views = {}
+    lines = ['# Combat block ids', '',
+             'Replace a block by saving `remake/art/blocks/<ID>.png` (any size; square works best).',
+             '', '| id | what | reference |', '|----|------|-----------|']
+    tiles = {'F': gfx.decode_block(Container(gf.read('wildcom.daa'), 'w').get(1)),
+             'D': gfx.decode_block(Container(gf.read('dungcom.daa'), 'd').get(1))}
+    for bid, desc in blocks.catalogue(gf):
+        info = blocks.parse(bid)
+        ref = '%s.png' % bid
+        if info['kind'] in ('wall', 'door'):
+            key = (info['area'], info['walldef'])
+            if key not in views:
+                area, wid = key
+                wd = Container(gf.read('walldef%s.dax' % area), 'walldef%s.dax' % area)
+                sym = Container(gf.read('8x8d%s.daa' % area), '8x8d%s.daa' % area)
+                slots = view3d.WallSlots(wd, sym, common)
+                slots.load(1, wid)
+                views[key] = slots
+            if info['kind'] == 'wall':
+                buf = view3d.Renderer().render(corridor(info['style']), 1, 3, 0, views[key])
+                big = [pal[buf[(y // 2) * 88 + x // 2]] for y in range(176) for x in range(176)]
+                write_png(os.path.join(out, ref), 176, 176, big)
+            else:
+                ref = '%s.png' % bid.replace('D', 'W', 1)
+        elif info['kind'] in ('ground', 'obstacle', 'floor'):
+            pic = tiles['D' if info['kind'] == 'floor' else 'F']
+            f, p = pic.frames[info['tile']], pic.rgb_palette()
+            write_png(os.path.join(out, ref), 72, 72, [p[f[(y // 3) * 24 + x // 3]] for y in range(72) for x in range(72)])
         else:
-            sh = 4 if side == 4 else 0
-            d[0x100 + i] = (d[0x100 + i] & ~(15 << sh)) | (t << sh)
-    for y in range(1, 4):
-        setw(1, y, 6, wall)
-        setw(1, y, 2, wall)
-    setw(1, 1, 0, wall)
-    raw[2:] = d
-    return GeoMap(bytes(raw))
+            ref = ''
+        lines.append('| `%s` | %s | %s |' % (bid, desc, ('![](%s)' % ref) if ref else ''))
+    write(os.path.join(out, 'index.md'), '\n'.join(lines) + '\n')
 
 
 def _map_png(path, g, cell=12):
