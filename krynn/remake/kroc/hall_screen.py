@@ -38,6 +38,26 @@ class HallView(Panel):
             self.train()
         elif k == pygame.K_g and self.ch.spell_picks:
             self.start_picking()
+        elif k == pygame.K_c:
+            if len(self.world.party) >= 6:
+                self.message = 'The party is full (six).'
+            else:
+                from .character_screens import CreateView
+                self.done = True
+                self.app.overlay_next = CreateView(self.app)
+        elif k == pygame.K_r:
+            if len(self.party) <= 1:
+                self.message = 'The party cannot be left empty.'
+            else:
+                self.removing = self.ch
+                self.message = 'Send %s away from the party for good? Y / N' % self.ch.name
+        elif k == pygame.K_y and getattr(self, 'removing', None):
+            self.world.party.remove(self.removing)
+            self.lines.append('%s bids you farewell.' % self.removing.name)
+            self.removing, self.message = None, None
+            self.sel = 0
+        elif k == pygame.K_n and getattr(self, 'removing', None):
+            self.removing, self.message = None, None
         elif k == pygame.K_k:
             joined, line = T.petition(self.ch)
             if joined:
@@ -138,5 +158,5 @@ class HallView(Panel):
         for line in self.lines:
             self.text(screen, line, x, yy, GOOD)
             yy += ROW
-        self.text(screen, 'RETURN/T train   G choose a grimoire spell   K knight: petition the next order   '
-                  'ESC leave', x, r.bottom - 92, DIM)
+        self.text(screen, 'RETURN/T train   G grimoire spell   K knight: next order   C new character   '
+                  'R remove   ESC leave', x, r.bottom - 92, DIM)

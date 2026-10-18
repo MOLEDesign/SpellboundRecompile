@@ -111,6 +111,17 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   knight petition the Knights of the Sword or the Rose, with the
   manual's experience and ability requirements. Fighters and knights from
   7th level and rangers from 8th strike three times every two rounds.
+* **Characters**: V shows the character sheet (abilities with exceptional
+  strength, levels, experience and the next level, HP, AC, THAC0, damage,
+  saves, god, knightly order, robe and moon, readied items, spells).
+  `krynn.py --new` makes a new party instead of the save disk's, and a
+  hall can add (C) or send away (R) characters. Creation follows the
+  manual: race, class or multi-class allowed for the race, alignment
+  (knights lawful good, dwarven clerics serve Reorx), the god, abilities
+  inside the race's ranges with each class's minimums, name and icon. A
+  new character starts at the manual's level with its class's kit. Unlike
+  the original's single roll, abilities are 4d6 best three and can be
+  rolled again as often as you like.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -138,8 +149,6 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
 The parts of the original engine that live in `game` rather than in the
 scripts are still to be rebuilt:
 
-* character creation and the character sheet (the party is loaded from the
-  save disk)
 * sound and music
 
 ## Play
@@ -149,6 +158,7 @@ pip3 install pygame-ce
 python3 remake/krynn.py            # finds krynn/original/*.zip by itself
 python3 remake/krynn.py --size 1600x900    # or --fullscreen
 python3 remake/krynn.py --load A           # carry on from saved game A
+python3 remake/krynn.py --new              # make a new party first
 ```
 
 | key | action |
@@ -159,6 +169,7 @@ python3 remake/krynn.py --load A           # carry on from saved game A
 | L | search/look |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
 | J | the journal (entries and tavern tales found so far) |
+| V | character sheet |
 | I | items: ready, give, drop, use (potions, scrolls to scribe) |
 | E | make camp: rest, rest until healed, fix (heal with spells), memorise spells, save |
 | F5 / F9 | save / load (ten slots, A to J) |

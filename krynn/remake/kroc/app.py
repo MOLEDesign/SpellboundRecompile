@@ -14,6 +14,7 @@ from .journal import Journal, JournalView
 from .save_screen import SaveView
 from .camp_screen import CampView
 from .hall_screen import HallView
+from .character_screens import SheetView, CreateView
 from .inventory import ItemsView, ShopView, TempleView, TreasureView
 from .world import SHOP_FLAG, TEMPLE_FLAG
 from .world import World, OVERLAND_X, OVERLAND_Y
@@ -310,6 +311,9 @@ class App:
             else:
                 self.overlay = SaveView(self, 'save')
             return
+        if ev.key == pygame.K_v and not self.combat:
+            self.overlay = SheetView(self, self.world.selected)
+            return
         if ev.key == pygame.K_i and not self.combat:
             self.overlay = ItemsView(self, self.world.selected)
             return
@@ -371,6 +375,10 @@ class App:
     def save_game(self, slot):
         savegame.save(slot, self.world, self.visited)
         self.notify('Game saved in slot %s.' % slot)
+
+    def new_party(self):
+        """Make a party from scratch before the story starts (krynn.py --new)."""
+        self.overlay = CreateView(self, new_party=True)
 
     def start_camp(self, mode):
         self.picture = self.sprite = None

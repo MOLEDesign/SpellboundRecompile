@@ -600,6 +600,41 @@ def test_vault(gf):
     assert w.purse['steel'] == 1000 - 520 + 280
 
 
+def test_creation(gf):
+    """Every race and class combination builds a sound character that saves and trains."""
+    import random
+    from kroc import creation as C, training as T, magic, savegame
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    types, words = w.files.item_types(), w.files.item_words()
+    rng = random.Random(11)
+    assert C.combos_for(6) == [(c,) for c in ('cleric', 'fighter', 'ranger', 'magic-user', 'thief', 'knight')]
+    assert ('magic-user',) not in C.combos_for(5), 'no kender mages'
+    assert C.gods_for(4, race=4) == [6], 'dwarven clerics serve Reorx'
+    made = []
+    for race in range(7):
+        for combo in C.combos_for(race):
+            align = C.alignments_for(combo, race)[0]
+            for _ in range(500):
+                stats = C.roll_stats(rng, race, combo)
+                if not C.qualifies(stats, combo):
+                    break
+            ch = C.build('T%d%d' % (race, len(made)), race, combo, align, stats, rng, types, words)
+            assert ch.hp_max > 0 and all(ch.levels[c] >= 1 for c in combo), (race, combo)
+            assert ch.thac0 <= 24 and -2 <= ch.ac <= 10, (race, combo, ch.thac0, ch.ac)
+            assert magic.fit(ch, ch.memorised)[1] == [], (race, combo)
+            assert 'knight' not in combo or ch.levels['knight'] == 1
+            made.append(ch)
+    w.party = made[:6]
+    w2, _ = savegame.restore(json_roundtrip(savegame.snapshot(w)), w.files)
+    for a, b in zip(w.party, w2.party):
+        assert (a.levels, a.hp_max, a.ac, a.thac0, a.weapon, a.book, a.alignment) == \
+            (b.levels, b.hp_max, b.ac, b.thac0, b.weapon, b.book, b.alignment), a.name
+    hero = made[0]
+    hero.experience += 100000
+    assert T.train(hero, rng), 'a new character trains like any other'
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

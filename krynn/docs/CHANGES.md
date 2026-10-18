@@ -61,6 +61,14 @@ the original's: the remake reads them from your own disks.
 | Hit points for a new level rolled from scratch (a fighter could gain 1) | A new level never gives less than half the hit die, plus constitution. |
 | Who can train, and how far off the others are, found by trying | The hall lists every character's classes, experience and the next level's figure, and marks who is ready. |
 
+### Characters
+
+| Original | Remake |
+|----------|--------|
+| One roll of the abilities per try | 4d6 best three, inside the race's ranges, rolled again as often as you like; the screen shows which class minimums a roll misses. |
+| A new character's hit points could be 1 per die | At least half of each hit die. |
+| Party management only at a hall's menus | The same at a hall (C new, R remove), plus `--new` to start the story with a new party. |
+
 ### Saving
 
 | Original | Remake |
@@ -85,6 +93,7 @@ to change.
 | Raise Dead | Elves cannot be raised; survival chance by constitution (40% at 3 to 100% at 18, manual p.55); survivors lose a point of constitution, the others are gone for good | `remake/kroc/camp_magic.py` |
 | The gods' special spells | One special slot, two from cleric level 5 (the manual gives no count) | `GOD_SPELLS`, `slots` in `magic.py` |
 | Knights' tithe | Not applied: with one shared purse it would empty the whole party's money | — |
+| New characters | Starting experience by the manual (second level; clerics and knights first); a starting kit by class (knights: plate, shield, long sword, as the manual says; kender: a hoopak); a starting grimoire by robe; 3d6 x 10 steel (x 2 for knights) | `remake/kroc/creation.py` |
 | A mage's new spell | Chosen from the spells open to the mage's order (manual p.54) | `training.WHITE`, `training.RED` |
 | Moons | Solinari 36 days, Lunitari 28, Nuitari 8, all full on day 1. Waxing: +1 spell. High sanction: +2 spells, +1 to saves, +1 level (level 6+, INT 15+). Low sanction: -1 save, -1 level. | `magic.MOONS`, `magic.PHASE_EFFECT` |
 | Spell effects | AD&D spell descriptions: ranges, areas, durations, saves | `TABLE` in `remake/kroc/spells.py` |
@@ -125,5 +134,4 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* character creation and the character sheet (the party comes from the save disk)
 * sound and music
