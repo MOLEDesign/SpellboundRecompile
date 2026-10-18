@@ -82,6 +82,7 @@ to change.
 | THAC0 by level | AD&D first-edition matrices (fighters improve every 2 levels, clerics every 3, thieves 4, mages 5); matches every saved character | `training.thac0_for` |
 | Hit points per level | One hit die by class (fighters and knights d10, rangers and clerics d8, thieves d6, mages d4), at least half the die, plus constitution (manual p.55); shared out for multi-class characters | `training.roll_hp` |
 | Item powers | Wands: Magic Missiles (2 missiles), Fireballs, Lightning, Ice Storm, Paralyzation (Hold, up to 3) cast at level 6; Necklace of Missiles: fireballs at level 5. Potions: Healing 2d4+2, Extra Healing 3d8+3, Speed (hasted 6 rounds), Invisibility. Dragonlance and Mace of Disruption: double damage against dragons / undead; sword +4 vs reptiles: +3 more against draconians and dragons. Gauntlets of ogre power: strength 18/00; girdle of giant strength: +3 to hit, +7 damage. | `remake/kroc/magic_items.py` |
+| Raise Dead | Elves cannot be raised; survival chance by constitution (40% at 3 to 100% at 18, manual p.55); survivors lose a point of constitution, the others are gone for good | `remake/kroc/camp_magic.py` |
 | A mage's new spell | Chosen from the spells open to the mage's order (manual p.54) | `training.WHITE`, `training.RED` |
 | Moons | Solinari 36 days, Lunitari 28, Nuitari 8, all full on day 1. Waxing: +1 spell. High sanction: +2 spells, +1 to saves, +1 level (level 6+, INT 15+). Low sanction: -1 save, -1 level. | `magic.MOONS`, `magic.PHASE_EFFECT` |
 | Spell effects | AD&D spell descriptions: ranges, areas, durations, saves | `TABLE` in `remake/kroc/spells.py` |
@@ -121,7 +122,6 @@ How the data formats were decoded, including these offsets, is in
 ## Not yet rebuilt
 
 * the vault (banking at the outposts)
-* casting spells outside combat (other than Fix's healing)
 * the gods' bonus spells for clerics
 * changing knightly order at a hall
 * character creation and the character sheet (the party comes from the save disk)

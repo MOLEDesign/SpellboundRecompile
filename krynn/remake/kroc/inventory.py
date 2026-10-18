@@ -81,9 +81,9 @@ class Panel:
             y += ROW
         return y
 
-    def tabs(self, screen, current, x, y):
-        """The party as numbered tabs, the current one lit."""
-        for i, c in enumerate(self.party):
+    def tabs(self, screen, current, x, y, who=None):
+        """The party (or `who`) as numbered tabs, the current one lit."""
+        for i, c in enumerate(self.party if who is None else who):
             label = '%d %s' % (i + 1, c.name)
             self.text(screen, label, x, y, HILITE if c is current else DIM)
             x += self.app.small.size(label)[0] + 44

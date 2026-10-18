@@ -502,6 +502,40 @@ def test_magic_items(gf):
     assert MI.slayer(knight, words, types)[3] == 2
 
 
+def test_camp_magic(gf):
+    """Cures, Raise Dead (no elves), Remove Curse, Read Magic outside combat."""
+    import random
+    from cok.items import Item
+    from kroc import camp_magic as CM
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    w.vm.rng = random.Random(4)
+    by = {c.name: c for c in w.party}
+    kal, knight, garin = by['KAL'], by['SIR STRONGSWORD'], by['GARIN']
+    knight.hp = 5
+    assert 3 in CM.camp_spells(kal)
+    line = CM.cast(w, kal, 3, knight)
+    assert knight.hp > 5 and 'Cure Light Wounds' in line and kal.spells.count(3) == 1
+    kal.spells.append(67)
+    knight.dead, knight.stats['CON'] = True, 18          # 100% survival
+    CM.cast(w, kal, 67, knight)
+    assert not knight.dead and knight.hp == 1 and knight.stats['CON'] == 17
+    kal.spells.append(67)
+    garin.dead = True                                    # a half-elf can be raised
+    by['SIRRION'].dead = True                            # a Qualinesti elf cannot
+    assert 'elves' in CM.cast(w, kal, 67, by['SIRRION']) and by['SIRRION'].dead and 67 in kal.spells
+    sword = next(i for i in knight.items if i.type == 18)
+    sword.cursed = True
+    kal.spells.append(43)
+    CM.cast(w, kal, 43, knight)
+    assert not sword.cursed
+    garin.dead = False
+    scroll = Item('Scroll', 39, words=(0x66, 0x28, 0x78), hidden=0x24, effects=(30, 32, 45))
+    garin.items.append(scroll)
+    garin.spells.append(18)
+    assert '3 Spells' in CM.cast(w, garin, 18) and scroll.hidden == 0
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

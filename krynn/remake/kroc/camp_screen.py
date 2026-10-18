@@ -18,6 +18,7 @@ ROW = 40
 MENU = (('REST', 'Rest one night'),
         ('HEAL', 'Rest until healed'),
         ('FIX', 'Fix: clerics heal, then rest as needed'),
+        ('CAST', 'Cast a spell: cures, Raise Dead, Remove Curse...'),
         ('MEMORISE', 'Memorise spells'),
         ('SAVE', 'Save the game'),
         ('EXIT', 'Break camp'))
@@ -83,6 +84,10 @@ class CampView:
         if word in ('REST', 'HEAL', 'FIX'):
             self.done = True
             self.app.start_camp({'REST': 'rest', 'HEAL': 'heal', 'FIX': 'fix'}[word])
+        elif word == 'CAST':
+            from .camp_magic import CastView
+            self.done = True
+            self.app.overlay_next = CastView(self.app)
         elif word == 'MEMORISE':
             if not self.casters:
                 self.message = 'No one in the party casts spells.'

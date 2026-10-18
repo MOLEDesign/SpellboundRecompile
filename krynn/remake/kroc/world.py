@@ -205,6 +205,7 @@ class Character:
                 'experience': self.experience, 'memorised': self.memorised, 'spells': self.spells,
                 'book': self.book, 'levels': self.levels, 'hp_max': self.hp_max,
                 'base_thac0': self.base_thac0, 'spell_picks': self.spell_picks,
+                'gone': getattr(self, 'gone', False), 'stats': self.stats,
                 'items': [i.to_list() for i in self.items],
                 'bonus': [self.hit_bonus, self.dmg_bonus], 'ac': self.ac, 'thac0': self.thac0,
                 'weapon': list(self.weapon)}
@@ -223,6 +224,8 @@ class Character:
         c.hp_max = d.get('hp_max', c.hp_max)
         c.base_thac0 = d.get('base_thac0', c.base_thac0)
         c.spell_picks = d.get('spell_picks', 0)
+        c.gone = d.get('gone', False)
+        c.stats.update(d.get('stats', {}))
         return c
 
     CLASSES = ('cleric', 'druid', 'fighter', 'paladin', 'ranger', 'magic-user', 'thief', 'knight')

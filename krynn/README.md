@@ -69,7 +69,10 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   cures, then the party rests and repeats) do it in one go and stop if
   the night is interrupted. Where and how often a rest is interrupted
   comes from each map's own camp script, as in the original, checked once
-  a night instead of every hour or so.
+  a night instead of every hour or so. Cast (in camp) uses the spells that
+  matter outside a fight: the cures, Raise Dead (elves cannot be raised;
+  the chance to survive comes from constitution), Remove Curse, Detect
+  Magic and Read Magic.
 * **Treasure, items and the armoury**: the loot a fight is set up with is
   handed over after you win, and each item goes to whoever you choose.
   Coins go into one purse the whole party shares (the original made you
@@ -127,8 +130,7 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* casting spells outside combat (other than Fix's healing), the gods' bonus
-  spells for clerics
+* the gods' bonus spells for clerics
 * the vault (banking)
 * changing knightly order at a hall
 * sound and music
