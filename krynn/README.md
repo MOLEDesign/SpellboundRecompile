@@ -9,6 +9,9 @@ it in Python, so its worst flaws can be fixed.
 
 ## What works now
 
+Every change from the original game, the rule choices and the bugs fixed are
+listed in [docs/CHANGES.md](docs/CHANGES.md).
+
 * **Every data format decoded** (see [docs/FORMATS.md](docs/FORMATS.md)):
   disk images, DAX/DAA containers, all pictures (big pictures, animated
   portraits, 3-distance monster sprites, combat icons, wall tiles), IFF
