@@ -46,6 +46,7 @@ def snapshot(world, visited=(), label=''):
         'party': [c.to_dict() for c in world.party],
         'selected': world.selected,
         'clock': world.clock,
+        'minutes': world.minutes,
         'journal': [list(r) for r in world.journal_found],
         'visited': sorted(list(v) for v in visited),
     }
@@ -68,6 +69,7 @@ def restore(data, files=None, log=None):
     w.party = [Character.from_dict(d) for d in data['party']]
     w.selected = data['selected']
     w.clock = data['clock']
+    w.minutes = data.get('minutes', w.minutes)
     w.journal_found = [tuple(r) for r in data['journal']]
     if data['block'] is not None:
         vm.load(data['block'])

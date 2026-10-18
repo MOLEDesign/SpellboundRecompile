@@ -12,6 +12,7 @@ from .combat_screen import CombatScreen
 from . import savegame
 from .journal import Journal, JournalView
 from .save_screen import SaveView
+from .camp_screen import CampView
 from .world import World, OVERLAND_X, OVERLAND_Y
 
 # Everything is drawn on a 1920x1080 frame, then fitted to the window.
@@ -97,6 +98,7 @@ class App:
         self.overlay = None         # JournalView while reading
         self.journal = Journal()
         self.journal_button = pygame.Rect(0, 0, 0, 0)
+        self.overlay_next = None    # a screen to open when the current one closes
         self.seen_refs = set()      # references already shown from the current text
         self.wait_until = 0
         self.visited = set()
@@ -271,7 +273,7 @@ class App:
             popup = self.overlay.popup
             self.overlay.key(ev)
             if self.overlay.done:
-                self.overlay = None
+                self.overlay, self.overlay_next = self.overlay_next, None
                 if popup and ev.key == pygame.K_j:
                     self.open_journal()
             return
@@ -283,6 +285,12 @@ class App:
                 self.notify('Finish what you are doing first: you can save when the party is free to move.')
             else:
                 self.overlay = SaveView(self, 'save')
+            return
+        if ev.key == pygame.K_e:
+            if self.busy():
+                self.notify('You cannot make camp in the middle of things.')
+            else:
+                self.overlay = CampView(self)
             return
         if ev.key == pygame.K_F9:
             self.overlay = SaveView(self, 'load')
@@ -322,9 +330,16 @@ class App:
         savegame.save(slot, self.world, self.visited)
         self.notify('Game saved in slot %s.' % slot)
 
+    def start_camp(self, mode):
+        self.picture = self.sprite = None
+        self.gen = self.world.camp(mode)
+        self.answer = None
+        self.pump()
+
     def load_game(self, slot):
         world, visited = savegame.load(slot, self.world.files, self.log)
         self.world, self.visited = world, visited
+        self.overlay_next = None
         self.gen = self.menu = self.combat = None
         self.answer = None
         self.picture = self.sprite = None
@@ -358,7 +373,7 @@ class App:
         if self.overlay is not None:
             self.overlay.click(pos)
             if self.overlay.done:
-                self.overlay = None
+                self.overlay, self.overlay_next = self.overlay_next, None
             return
         if self.journal_button.collidepoint(pos) and self.combat is None:
             self.open_journal()
@@ -484,7 +499,7 @@ class App:
         info = '%d,%d facing %s' % (w.x, w.y, 'NORTH EAST SOUTH WEST'.split()[w.facing // 2])
         t = self.small.render(info, True, DIM)
         c.blit(t, (MAP.x, MAP.bottom + 24))
-        hint = self.small.render('arrows move, L search', True, DIM)
+        hint = self.small.render('arrows move, L search, E camp', True, DIM)
         c.blit(hint, (MAP.x, MAP.bottom + 24 + 36))
 
     def _draw_roster(self):

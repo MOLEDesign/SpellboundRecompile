@@ -350,6 +350,48 @@ def test_save_load(gf):
         savegame.DIR = old
 
 
+def test_camp(gf):
+    """Spell slots match the saved party; moons; rest, fix and an interrupted night."""
+    from kroc import magic
+    from kroc.world import REST_CHANCE, REST_INTERVAL
+    w = _throtl_world(gf)
+    garin = next(c for c in w.party if c.name == 'GARIN')
+    kal = next(c for c in w.party if c.name == 'KAL')
+    for c in w.party:
+        assert magic.fit(c, c.memorised, 0)[1] == [], (c.name, 'saved spells must fit day 0')
+    assert 21 in magic.known(garin)['M'] and 47 not in magic.known(garin)['M']
+    assert 3 in magic.known(kal)['C'] and 4 not in magic.known(kal)['C'], 'no evil reversals'
+    # Lunitari (Garin's Red Robes) in low sanction on day 14: no bonus spells
+    assert magic.moon_phase(2, 14) == 'low sanction'
+    assert len(magic.fit(garin, garin.memorised, 14)[0]) == 2
+    # Fix: the clerics' cures first, then nights until everyone is whole
+    w.party[0].hp = 3
+    kal.spells.remove(21)
+    start = w.minutes
+    lines = []
+    for r in w.camp('fix'):
+        if r[0] == 'print':
+            lines.append(r[1])
+        assert r[0] != 'combat', 'Throtl was not given a 100% chance here'
+    assert not w.party_hurt() and not w.spells_missing(), lines
+    assert any('Cure Light Wounds' in ln for ln in lines) and w.minutes > start
+    # a night with a sure interruption runs the block's campint: an ambush
+    real = w.vm.get
+    w.vm.get = lambda loc: {REST_CHANCE: 100, REST_INTERVAL: 96}.get(loc & 0xFFFF, None) or real(loc)
+    kinds = []
+    g = w.camp('rest')
+    ans = None
+    for _ in range(500):
+        try:
+            r = g.send(ans)
+        except StopIteration:
+            break
+        kinds.append(r[0])
+        ans = True if r[0] == 'combat' else (0 if r[0] == 'menu' else None)
+    w.vm.get = real
+    assert 'combat' in kinds, kinds
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))

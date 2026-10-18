@@ -110,8 +110,10 @@ For example, black dragon: 1d4/1d4 claws (4 half-attacks), 3d6 bite, AC 3.
 Party records (`save/CHRDATAn.SAV`, 426 bytes) use a shifted layout:
 0x00 name, 0x10 stats, 0x1E-0x59 memorised spells (1-94; larger values are
 not spells), 0x5A 60 - base THAC0, 0x5B race, 0x5C class, 0x64 maximum HP,
-0xFE-0x105 levels (cleric, druid, fighter, paladin, ranger, magic-user,
-thief, knight), 0x141-0x14B combat icon (head,
+0x5E deity (clerics), 0x5F mage order (1 White Robes, 2 Red, 3 Black,
+0 none), 0x66-0xC3 spellbook: one byte per spell number at 0x65 + id (the
+mage's grimoire, the cleric's prayers), 0xFE-0x105 levels (cleric, druid,
+fighter, paladin, ranger, magic-user, thief, knight), 0x141-0x14B combat icon (head,
 body, slot, size 1 small / 2 normal, six colour bytes), 0x19B 60 - THAC0
 with bonuses, 0x19C 60 - AC, 0x1A0/0x1A2 weapon dice, 0x1A5 damage bonus,
 0x1A8 current HP, 0x1A9 movement.
@@ -128,6 +130,15 @@ Combat tiles: `DUNGCOM`, `WILDCOM` and `RANDCOM` hold 24x24 tiles as
 the 13x5 map squares around the party into a skewed 50x25 grid, which is
 the fake isometric view. The remake draws the same area straight from
 above (`remake/kroc/combat.py`).
+
+## Script variables for camping
+
+`C04F` is the flags byte of the party's map square (the third GEO plane);
+the low six bits number the rooms and areas of the map, and scripts test
+them for room events and safe places to rest. Each block's `precamp` entry
+sets `7ED3` (chance in percent that a rest is interrupted) and `7ED2`
+(how often it is checked; 0 = never), and its `campint` entry is run when
+a rest is interrupted (usually an ambush from the block's monster table).
 
 ## Spells
 

@@ -5,6 +5,8 @@ from cok import blocks
 
 from cok import items as I
 
+from . import magic
+
 from .combat import (Attack, Battle, Combatant, ENEMY, PARTY, SPAN_X, SPAN_Y, SQUARE,
                      Missile, dungeon_arena, open_arena, DYING, DEAD)
 
@@ -85,7 +87,7 @@ def monster_combatant(world, mid, n, icon=None):
     return c
 
 
-def party_combatant(ch, types=None):
+def party_combatant(ch, types=None, day=0):
     n, size, bonus = ch.weapon
     c = Combatant(ch.name, PARTY, ch.hp, ch.hp_max, ch.ac, ch.thac0, [Attack(2, n, size, bonus)],
                   ch.move, ('party', ch), ref=ch)
@@ -93,11 +95,13 @@ def party_combatant(ch, types=None):
         c.missile = make_missile(ch.items, types,
                                  ch.base_thac0 - I.dex_missile_bonus(ch.stats.get('DEX', 10)))
     c.spells = ch.spells               # the same list: spells cast stay used until a rest
-    lv = ch.levels
-    c.levels = {'C': max(lv.get('cleric', 0), lv.get('druid', 0), lv.get('paladin', 0) - 8),
-                'M': max(lv.get('magic-user', 0), lv.get('ranger', 0) - 8)}
-    c.hd = max(lv.values() or [1]) or 1
-    c.save_spell = ch.save_spell
+    c.levels = magic.caster_levels(ch)
+    c.hd = ch.top_level
+    # the moons of Krynn: a mage's saving throws and casting level wax and wane
+    save, _, level = magic.moon_effect(ch, day)
+    if c.levels['M']:
+        c.levels['M'] = max(1, c.levels['M'] + level)
+    c.save_spell = ch.save_spell - save
     if ch.dead:
         c.status = DEAD
     elif ch.hp <= 0:
@@ -109,7 +113,7 @@ def party_combatant(ch, types=None):
 def build(world, monsters, rng=None):
     rng = rng or random.Random()
     types = world.files.item_types()
-    party = [party_combatant(ch, types) for ch in world.party if not ch.dead]
+    party = [party_combatant(ch, types, getattr(world, 'day', 0)) for ch in world.party if not ch.dead]
     enemies = []
     for mid, count, pic in monsters:
         for k in range(max(1, count)):

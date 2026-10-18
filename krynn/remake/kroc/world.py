@@ -7,10 +7,17 @@ from cok.geo import GeoMap
 
 from .vm import VM, IN_DUNGEON
 
+NIGHT = 8 * 60                  # a night's rest, in minutes
+REST_INTERVAL, REST_CHANCE = 0x7ED2, 0x7ED3     # set by the precamp script
 NEW_GAME_BLOCK = 0x24       # "At the Inn of the Last Home in Solace..."
 OVERLAND_X, OVERLAND_Y = 0x4BC3, 0x4BC4
 CANCEL_MOVE = 0x7EC9
 OVERLAND_W, OVERLAND_H = 38, 15     # the overland picture in 8x8 cells
+
+
+def clock_text(minutes):
+    day, m = divmod(minutes, 24 * 60)
+    return 'Day %d, %02d:%02d' % (day + 1, m // 60, m % 60)
 
 
 class Files:
@@ -121,14 +128,16 @@ class Character:
         self.icon = dict(head=r[0x141], body=r[0x142], size=r[0x144] or 2, colours=bytes(r[0x146:0x14C]))
         # 0x1E-0x59 memorised spells (1-94; higher numbers are not spells); 0xFE-0x105
         # levels: cleric, druid, fighter, paladin, ranger, magic-user, thief, knight
-        self.memorised = [x for x in r[0x1E:0x5A] if 1 <= x <= 94]
-        self.spells = list(self.memorised)        # still available until the next rest
+        self.memorised = [x for x in r[0x1E:0x5A] if 1 <= x <= 94]   # chosen to memorise
+        self.spells = list(self.memorised)        # in memory now: used ones return on a rest
+        self.book = [i for i in range(1, 95) if r[0x65 + i]]       # grimoire / prayer list
         self.levels = dict(zip(self.CLASSES, r[0xFE:0x106]))
 
     # --- saving -------------------------------------------------------------------
     def to_dict(self):
         return {'name': self.name, 'raw': self.raw.hex(), 'hp': self.hp, 'dead': self.dead,
                 'experience': self.experience, 'memorised': self.memorised, 'spells': self.spells,
+                'book': self.book,
                 'items': [[i.name, i.type, i.ready, i.quantity] for i in self.items]}
 
     @classmethod
@@ -137,6 +146,7 @@ class Character:
         c = cls(d['name'], bytes.fromhex(d['raw']), [Item(*i) for i in d['items']])
         c.hp, c.dead, c.experience = d['hp'], d['dead'], d['experience']
         c.memorised, c.spells = list(d['memorised']), list(d['spells'])
+        c.book = list(d.get('book', c.book))
         return c
 
     CLASSES = ('cleric', 'druid', 'fighter', 'paladin', 'ranger', 'magic-user', 'thief', 'knight')
@@ -145,6 +155,10 @@ class Character:
                   'magic-user': (12, 12, 12, 12, 12, 10, 10, 10, 10, 10),
                   'thief': (15, 15, 15, 15, 13, 13, 13, 13, 11, 11),
                   'fighter': (17, 17, 16, 16, 14, 14, 13, 13, 11, 11)}
+
+    @property
+    def top_level(self):
+        return max(self.levels.values()) or 1
 
     @property
     def save_spell(self):
@@ -174,6 +188,7 @@ class World:
         self.party = self.load_party()
         self.selected = 0
         self.clock = 0
+        self.minutes = 8 * 60        # game time: day 0, eight in the morning
         self.moved = False
         self.journal_found = []      # (kind, n) of journal entries / tavern tales heard
         self.wall_loads = []         # LOAD WALLS calls since the wall set changed (for saves)
@@ -214,12 +229,108 @@ class World:
             c.experience += amount
         self.log('The party gains %d experience.' % amount)
 
+    @property
+    def day(self):
+        return self.minutes // (24 * 60)
+
     def rest(self):
-        """A night at an inn: the living recover all their hit points."""
+        """A night at an inn: the living recover all their hit points and spells."""
+        self.minutes += NIGHT
         for c in self.party:
             if not c.dead:
                 c.hp = c.hp_max
-                c.spells = list(c.memorised)
+                self.rememorise(c)
+
+    def rememorise(self, c):
+        """After a full rest: the chosen spells are back in memory (as many as fit)."""
+        from . import magic
+        kept, dropped = magic.fit(c, c.memorised, self.day)
+        c.spells = kept
+        if dropped and any(magic.SPELLS[s].cls == magic.MAGE for s in dropped):
+            self.log('%s cannot hold every chosen spell under the moons tonight.' % c.name)
+        return dropped
+
+    def night(self):
+        """Eight hours of rest in camp: some hit points back, spells memorised."""
+        self.minutes += NIGHT
+        for c in self.party:
+            if c.dead:
+                continue
+            if c.hp < c.hp_max:
+                c.hp = min(c.hp_max, max(c.hp, 0) + c.top_level)
+            self.rememorise(c)
+
+    def party_hurt(self):
+        return any(not c.dead and c.hp < c.hp_max for c in self.party)
+
+    def spells_missing(self):
+        from . import magic
+        return any(not c.dead and sorted(c.spells) != sorted(magic.fit(c, c.memorised, self.day)[0])
+                   for c in self.party)
+
+    def cast_cures(self):
+        """Clerics use their healing spells on whoever is most hurt (the camp's Fix).
+        Returns the lines to show."""
+        from .spells import SPELLS
+        from .combat import roll
+        out = []
+        cures = (63, 57, 3)                   # critical, serious, light: biggest first
+        for healer in self.party:
+            if healer.dead or healer.hp <= 0:
+                continue
+            for sid in cures:
+                while sid in healer.spells:
+                    hurt = [c for c in self.party if not c.dead and c.hp < c.hp_max]
+                    if not hurt:
+                        return out
+                    t = max(hurt, key=lambda c: c.hp_max - c.hp)
+                    n, size, plus = {3: (1, 8, 0), 57: (2, 8, 1), 63: (3, 8, 3)}[sid]
+                    amount = roll(self.vm.rng, n, size, plus)
+                    t.hp = min(t.hp_max, max(t.hp, 0) + amount)
+                    healer.spells.remove(sid)
+                    out.append('%s casts %s on %s: +%d.' % (healer.name, SPELLS[sid].name, t.name, amount))
+        return out
+
+    def camp(self, mode='rest'):
+        """Generator: make camp and rest. mode 'rest' = one night, 'heal' = until
+        everyone is healed and has their spells, 'fix' = the same, the clerics
+        casting their healing spells first each time.
+
+        The module's precamp script sets the chance (7ED3, percent) that a
+        night is interrupted and whether it is checked at all (7ED2); 0 means
+        a safe place. An interrupted rest runs the campint script (an
+        ambush, a visitor, "you cannot rest here"...)."""
+        yield ('print', 'The party makes camp...\n', True)
+        self.vm.set(REST_INTERVAL, 0)
+        self.vm.set(REST_CHANCE, 0)
+        yield from self.vm.run('precamp')
+        if self.vm.new_ecl is not None:
+            yield from self._settle()
+            return
+        interval, chance = self.vm.get(REST_INTERVAL), self.vm.get(REST_CHANCE)
+        nights = 1 if mode == 'rest' else 30
+        for k in range(nights):
+            if mode == 'fix':
+                for line in self.cast_cures():
+                    yield ('print', line + '\n', False)
+            if mode != 'rest' and not self.party_hurt() and not self.spells_missing():
+                break
+            if interval and chance and self.vm.rng.randint(1, 100) <= chance:
+                self.minutes += self.vm.rng.randint(1, NIGHT)
+                yield ('print', 'The party is disturbed...\n', True)
+                yield from self.vm.run('campint')
+                yield from self._settle()
+                return
+            self.night()
+            yield ('print', 'The party rests through the night. %s.\n' % clock_text(self.minutes), False)
+        if mode == 'fix':
+            for line in self.cast_cures():
+                yield ('print', line + '\n', False)
+        if self.party_hurt():
+            if mode != 'rest':
+                yield ('print', 'Some wounds still need time.\n', False)
+        else:
+            yield ('print', 'Everyone is fit and ready.\n', False)
 
     def advance_clock(self, n):
         self.clock += n

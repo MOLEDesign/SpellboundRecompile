@@ -56,6 +56,17 @@ it in Python, so its worst flaws can be fixed.
   record, hit points, experience, items and spells, the journal and the
   automap. Saves are JSON files in `krynn/saves/` (kept out of git; set
   `KRYNN_SAVES` to put them elsewhere).
+* **Camp, rest and memorising**: E makes camp, as in the original. Pick
+  each caster's spells in Memorise (the slots follow the AD&D tables, the
+  cleric's wisdom bonus and, for mages, Krynn's moons: their order's moon
+  in high sanction gives two extra spells, waxing one). A night's rest
+  heals everyone a little (one hit point per level, not the original's one
+  a day) and brings the chosen spells back. Instead of resting over and
+  over by hand, "Rest until healed" and "Fix" (the clerics cast their
+  cures, then the party rests and repeats) do it in one go and stop if
+  the night is interrupted. Where and how often a rest is interrupted
+  comes from each map's own camp script, as in the original, checked once
+  a night instead of every hour or so.
 * **Morale**: monsters no longer fight to the last goblin. When half their
   side is down, or one is badly hurt, each rolls against its morale (better
   for tougher monsters) and may break and run for the edge of the field,
@@ -85,10 +96,9 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* spells outside combat (memorising, healing
-  on the move, Detect Magic...)
-* items, treasure, shops, training, resting rules (an inn heals everyone
-  fully and restores spells)
+* casting spells outside combat (other than Fix's healing), scribing scrolls,
+  the gods' bonus spells for clerics
+* items, treasure, shops, training
 * sound and music
 
 ## Play
@@ -108,6 +118,7 @@ python3 remake/krynn.py --load A           # carry on from saved game A
 | L | search/look |
 | RETURN / SPACE, or a letter | choose a menu option (mouse works too) |
 | J | the journal (entries and tavern tales found so far) |
+| E | make camp: rest, rest until healed, fix (heal with spells), memorise spells, save |
 | F5 / F9 | save / load (ten slots, A to J) |
 | F11 | full screen |
 | ESC | quit |
@@ -147,7 +158,7 @@ cok/            format library: adf, dax, compress, gfx, ilbm, geo, view3d, ecl,
 tools/          extract.py, adf.py, hunk.py, disasm68k.py (+ labels68k.txt), list_blocks.py, journal.py
 remake/         krynn.py (pygame), play_text.py, fonts/, art/ (replacement block art)
 remake/kroc/    vm, world, app, combat (rules), spells, encounter, combat_screen, art, journal,
-                savegame, save_screen
+                savegame, save_screen, magic (spell slots, moons), camp_screen
 docs/           FORMATS.md
 tests/          run_tests.py
 ```
