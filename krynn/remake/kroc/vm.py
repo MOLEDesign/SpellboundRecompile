@@ -65,7 +65,7 @@ class VM:
             return self.game.facing // 2
         if loc == SQUARE_FLAGS:
             return self.game.square_flags()
-        if 0x7C00 <= loc <= 0x7CFF:
+        if 0x7C00 <= loc <= 0x7DFF:
             v = self.game.character_value(loc - 0x7C00)
             if v is not None:
                 return v
@@ -88,6 +88,8 @@ class VM:
             self.game.set_position(y=value)
         elif loc == POS_DIR:
             self.game.set_position(facing=(value % 4) * 2)
+        elif 0x7C00 <= loc <= 0x7DFF and self.game.set_character_value(loc - 0x7C00, value):
+            return
         self.mem[loc] = value
 
     def get_string(self, loc):

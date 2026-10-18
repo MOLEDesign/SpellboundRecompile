@@ -102,6 +102,7 @@ class App:
         self.journal = Journal()
         self.journal_button = pygame.Rect(0, 0, 0, 0)
         self.overlay_next = None    # a screen to open when the current one closes
+        self.typing = None          # {'kind': 'number'/'string', 'text'} while a script asks
         self.seen_refs = set()      # references already shown from the current text
         self.wait_until = 0
         self.visited = set()
@@ -182,7 +183,8 @@ class App:
     # ------------------------------------------------------------------ VM pump
     def pump(self):
         """Run the script until it needs the player."""
-        while self.gen and not self.menu and not self.combat and not self.overlay and time.time() >= self.wait_until:
+        while self.gen and not self.menu and not self.combat and not self.overlay and not self.typing \
+                and time.time() >= self.wait_until:
             try:
                 req = self.gen.send(self.answer)
             except StopIteration:
@@ -198,6 +200,9 @@ class App:
                 self.flush()
                 self.menu, self.sel = (req[1], req[2]), 0
                 self.check_journal()
+            elif k in ('number', 'string'):           # INPUT NUMBER / INPUT STRING
+                self.flush()
+                self.typing = {'kind': k, 'text': ''}
             elif k == 'picture':
                 pid = req[1]
                 if pid == 0xFF:
@@ -320,6 +325,9 @@ class App:
         if ev.key == pygame.K_ESCAPE and not self.menu:
             self.running = False
             return
+        if self.typing is not None:
+            self.type_key(ev)
+            return
         if self.menu:
             items, horiz = self.menu
             back, fwd = (pygame.K_LEFT, pygame.K_RIGHT) if horiz else (pygame.K_UP, pygame.K_DOWN)
@@ -339,10 +347,22 @@ class App:
         if ev.key in KEYS:
             self.act(KEYS[ev.key])
 
+    def type_key(self, ev):
+        t = self.typing
+        if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            self.typing = None
+            self.answer = int(t['text'] or 0) if t['kind'] == 'number' else t['text']
+            self.pump()
+        elif ev.key == pygame.K_BACKSPACE:
+            t['text'] = t['text'][:-1]
+        elif ev.unicode and (ev.unicode.isdigit() if t['kind'] == 'number' else ev.unicode.isprintable()):
+            if len(t['text']) < (5 if t['kind'] == 'number' else 20):
+                t['text'] += ev.unicode.upper()
+
     # ------------------------------------------------------------------ saving
     def busy(self):
         """True while a script is waiting on the player (text, menu, fight)."""
-        return bool(self.gen or self.menu or self.combat)
+        return bool(self.gen or self.menu or self.combat or self.typing)
 
     def notify(self, text):
         self.add_text(text, False)
@@ -362,7 +382,7 @@ class App:
         world, visited = savegame.load(slot, self.world.files, self.log)
         self.world, self.visited = world, visited
         self.overlay_next = None
-        self.gen = self.menu = self.combat = None
+        self.gen = self.menu = self.combat = self.typing = None
         self.answer = None
         self.picture = self.sprite = None
         self.lines, self.para = [], ''
@@ -561,10 +581,12 @@ class App:
         bottom = TEXT_BOTTOM - 12
         menu_h = LINE + 8 if self.menu and self.menu[1] else 0
         avail = max(1, (bottom - top - 12 - menu_h) // LINE - (len(self.menu[0]) if self.menu and not self.menu[1] else 0))
+        if self.typing is not None:
+            rows.append('> %s_' % self.typing['text'])
         rows = rows[-avail:]
         y = top + 12
         for r in rows:
-            c.blit(self.font.render(r, True, TEXT), (left, y))
+            c.blit(self.font.render(r, True, HILITE if r.startswith('> ') and self.typing else TEXT), (left, y))
             y += LINE
         self.menu_rects = []
         if self.menu:

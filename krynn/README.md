@@ -84,7 +84,8 @@ listed in [docs/CHANGES.md](docs/CHANGES.md).
   saved party's figures exactly), a bow can stay slung beside a sword,
   potions of healing work and mages scribe spells from scrolls. The
   outposts' armouries buy, sell, identify and take gems and jewelry; the
-  temples heal for steel.
+  temples heal for steel. The vaults bank steel in lots of 100 (fee 20),
+  run by the original scripts.
 * **Training**: the halls (and the travelling trainers) open a training
   screen. The levels, experience tables and level limits are the manual's,
   and each saved character falls exactly on them. Training raises hit
@@ -139,7 +140,6 @@ scripts are still to be rebuilt:
 
 * character creation and the character sheet (the party is loaded from the
   save disk)
-* the vault (banking)
 * sound and music
 
 ## Play

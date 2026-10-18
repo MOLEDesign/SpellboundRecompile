@@ -111,6 +111,8 @@ in play.
 | Experience started at 0 | Read from the character record (offset 0x11E). |
 | `TREASURE` handed out loot before the fight it belongs to | The loot is held until the fight is won, then handed out. |
 | Shops and temples opened an empty fight | The scripts open them through `COMBAT` with a flag set (`7F6C` shop, `7EE2` temple); the remake opens the armoury or temple instead. |
+| Scripts that asked for a number or a name (the vault's "how many will you deposit?") got 0 | INPUT NUMBER and INPUT STRING open a typed prompt. |
+| The character window (`7C00`-`7DFF`) always read 0, so the vault saw no money and no characters | LOAD CHARACTER selects who the window shows; `7CC3` is the steel carried (the shared purse, held by the first character) and `7D00` says whether a character is there. |
 | Saved items read a plus of +104 | That byte is leftover memory; the real plus is two bytes later (the SWG records are word-aligned). |
 | Area spells were blocked by creatures standing in the way | Only walls block a spell's line of sight. |
 | A creature asleep or held could still make free attacks and stop archers shooting | Only creatures able to act count as a threat. |
@@ -123,6 +125,5 @@ How the data formats were decoded, including these offsets, is in
 
 ## Not yet rebuilt
 
-* the vault (banking at the outposts)
 * character creation and the character sheet (the party comes from the save disk)
 * sound and music

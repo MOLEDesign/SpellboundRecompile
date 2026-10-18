@@ -304,11 +304,37 @@ class World:
 
     def select_character(self, n):
         n &= 0x7F
+        self.loaded = n                  # what the 7Cxx window shows, even past the party
         if 0 <= n < len(self.party):
             self.selected = n
 
+    # The scripts read and write the character LOAD CHARACTER picked through
+    # 7C00-7DFF. The vault uses 7CC3 (steel carried) and 7D00 (character there?).
+    # The party shares one purse, which the first character holds for them.
+    STEEL, PRESENT = 0xC3, 0x100
+
+    def _loaded(self):
+        n = getattr(self, 'loaded', self.selected)
+        return self.party[n] if 0 <= n < len(self.party) else None
+
     def character_value(self, offset):
+        ch = self._loaded()
+        if offset == self.PRESENT:
+            return 1 if ch is not None and not ch.dead else 0
+        if offset == self.STEEL:
+            return self.purse['steel'] if ch is not None and ch is self.party[0] else 0
+        if offset == self.STEEL + 1:
+            return 0
         return None
+
+    def set_character_value(self, offset, value):
+        """True when the write landed on game state (else VM memory keeps it)."""
+        ch = self._loaded()
+        if offset == self.STEEL:
+            if ch is not None and ch is self.party[0]:
+                self.purse['steel'] = value
+            return True
+        return offset == self.PRESENT
 
     def add_experience(self, who, amount):
         for c in self.party:

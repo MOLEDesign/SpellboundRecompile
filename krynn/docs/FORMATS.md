@@ -135,7 +135,12 @@ the 13x5 map squares around the party into a skewed 50x25 grid, which is
 the fake isometric view. The remake draws the same area straight from
 above (`remake/kroc/combat.py`).
 
-## Script variables for camping
+## Script variables for camping and the vault
+
+After `LOAD CHARACTER n`, `7C00`-`7DFF` show character n: the vault reads
+`7CC3` (steel carried) and `7D00` (non-zero when there is a character n);
+`LOAD CHARACTER 128 + n` writes it back. The vault balance is `4C33`, in
+hundreds of steel.
 
 `C04F` is the flags byte of the party's map square (the third GEO plane);
 the low six bits number the rooms and areas of the map, and scripts test

@@ -567,6 +567,39 @@ def test_gods_and_orders(gf):
     assert c.attacks[0].half == 3
 
 
+def test_vault(gf):
+    """The outpost vault script banks and pays out the party's steel."""
+    from kroc.world import World, Files
+    w = World(files=Files(gf.source))
+    w.purse['steel'] = 1000
+    plan = ['NEXT', 'VAULT', 'DEPOSIT', 500, 'WITHDRAW', 300, 'EXIT']
+    g, ans, done = w.start(), None, False
+    for _ in range(20000):
+        try:
+            r = g.send(ans)
+        except StopIteration:
+            break
+        ans = None
+        if r[0] == 'number':
+            ans = plan.pop(0)
+        elif r[0] == 'treasure':
+            w.treasure(r[1])
+        elif r[0] == 'combat':
+            ans = True
+        elif r[0] == 'menu':
+            items = r[1]
+            if plan and plan[0] in items:
+                ans = items.index(plan.pop(0))
+                if not plan:
+                    done = True
+                    break
+            else:
+                ans = 0
+    assert done, plan
+    assert w.vm.get(0x4C33) == 2, 'five hundred in, three out'
+    assert w.purse['steel'] == 1000 - 520 + 280
+
+
 def json_roundtrip(d):
     import json
     return json.loads(json.dumps(d))
